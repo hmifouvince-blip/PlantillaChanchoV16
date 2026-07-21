@@ -1,0 +1,68 @@
+Guide to Generate a Download Link in the Loader
+
+1. Compress the File
+
+Compress your .exe file into a .zip format.
+
+Set the file password as "1".
+
+
+
+
+2. Upload the File to Dropbox
+
+Create an account on Dropbox if you don't have one.
+
+Upload the .zip file to your Dropbox account.
+
+Copy the generated download link.
+
+Example of a generated link:
+https://www.dropbox.com/scl/fi/6kplwsjjgzyrtuffq9vc1/namenamename?rlkey=ulbwseoqix80co0enasaar5etxr0r&dl=0
+
+
+
+3. Modify the Link
+
+To get a direct download link, make the following changes to the URL:
+
+Replace www.dropbox.com with dl.dropboxusercontent.com.
+
+Remove dl=0 from the end of the URL.
+
+Example of the corrected link:
+https://dl.dropboxusercontent.com/scl/fi/6kplwsjjgzyrtuffq9vc1/namenamename?rlkey=ulbwseoqix80co0enasaar5etxr0r&
+
+
+
+
+4. Register the Link in KeyAuth
+
+Log in to KeyAuth.
+
+In the Variables section, create a new variable with the name of your product.
+
+In the Variable Data field, paste the corrected download URL.
+
+
+
+
+5. Configure the Loader
+
+Open the ProductManager.cs file in your project.
+
+In the LoadGame method, use the name of the variable you created in KeyAuth for the "downloadURL" parameter.
+
+This will ensure the loader can download the file correctly.
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,382 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net7.0-windows7.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+		
+		<PublishTrimmed>true</PublishTrimmed>
+		<Platforms>AnyCPU;x64</Platforms>
+		<PublishAot>false</PublishAot>
+		<_suppressWinFormsTrimError>true</_suppressWinFormsTrimError>
+		<CustomResourceTypesSupport>true</CustomResourceTypesSupport>
+		<PlatformTarget>x64</PlatformTarget>
+		<ApplicationIcon>testLogo.ico</ApplicationIcon>
+		<Description>Eternal Project</Description>
+		<Title>Eternal Tool</Title>
+		<OutputType>WinExe</OutputType>
+		<PackageIcon>standard_2.png</PackageIcon>
+		<FileVersion>1.3.2.4</FileVersion>
+		<Copyright></Copyright>
+		<PackageReleaseNotes></PackageReleaseNotes>
+		<RootNamespace>$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
+		<AssemblyName>$(MSBuildProjectName)</AssemblyName>
+		<ApplicationManifest></ApplicationManifest>
+	</PropertyGroup>
+
+
+
+
+  <ItemGroup>
+    <None Remove="AllFonts\Inter-Black.ttf" />
+    <None Remove="AllFonts\Inter-BlackItalic.ttf" />
+    <None Remove="AllFonts\Inter-Bold.ttf" />
+    <None Remove="AllFonts\Inter-BoldItalic.ttf" />
+    <None Remove="AllFonts\Inter-ExtraBold.ttf" />
+    <None Remove="AllFonts\Inter-ExtraBoldItalic.ttf" />
+    <None Remove="AllFonts\Inter-ExtraLight.ttf" />
+    <None Remove="AllFonts\Inter-ExtraLightItalic.ttf" />
+    <None Remove="AllFonts\Inter-Italic.ttf" />
+    <None Remove="AllFonts\Inter-Light.ttf" />
+    <None Remove="AllFonts\Inter-LightItalic.ttf" />
+    <None Remove="AllFonts\Inter-Medium.ttf" />
+    <None Remove="AllFonts\Inter-MediumItalic.ttf" />
+    <None Remove="AllFonts\Inter-Regular.ttf" />
+    <None Remove="AllFonts\Inter-SemiBold.ttf" />
+    <None Remove="AllFonts\Inter-SemiBoldItalic.ttf" />
+    <None Remove="AllFonts\Inter-Thin.ttf" />
+    <None Remove="AllFonts\Inter-ThinItalic.ttf" />
+    <None Remove="Icons\arrow-right_icon-icons.com_72375.png" />
+    <None Remove="Icons\arrow.png" />
+    <None Remove="Icons\arrowBack.png" />
+    <None Remove="Icons\arrowRight.png" />
+    <None Remove="Icons\arrowRight3.png" />
+    <None Remove="Icons\checkIcon.png" />
+    <None Remove="Icons\closeIcon.png" />
+    <None Remove="Icons\csIcon.png" />
+    <None Remove="Icons\dcIcon.png" />
+    <None Remove="Icons\downloadIcon.png" />
+    <None Remove="Icons\expandedIcon.png" />
+    <None Remove="Icons\favOff.png" />
+    <None Remove="Icons\favOn.png" />
+    <None Remove="Icons\homeIcon.png" />
+    <None Remove="Icons\iconCheckF.png" />
+    <None Remove="Icons\iconDetailProduct.png" />
+    <None Remove="Icons\iconOpenDetails.png" />
+    <None Remove="Icons\iconPreviewSpecial.png" />
+    <None Remove="Icons\iconSignIn.png" />
+    <None Remove="Icons\iconSignUp.png" />
+    <None Remove="Icons\iconTabFav.png" />
+    <None Remove="Icons\iconTabHome.png" />
+    <None Remove="Icons\iconTabProducts.png" />
+    <None Remove="Icons\iconTabUserData.png" />
+    <None Remove="Icons\iconXF.png" />
+    <None Remove="Icons\igIcon.png" />
+    <None Remove="Icons\key_1.png" />
+    <None Remove="Icons\logOutIcon.png" />
+    <None Remove="Icons\playIcon.png" />
+    <None Remove="Icons\playVideoIcon.png" />
+    <None Remove="Icons\txKeyIcon.png" />
+    <None Remove="Icons\txPassIcon.png" />
+    <None Remove="Icons\txUserIcon.png" />
+    <None Remove="Icons\umIcon.png" />
+    <None Remove="Icons\xIcon.png" />
+    <None Remove="Icons\ytIcon.png" />
+    <None Remove="Images\bgLoader1.png" />
+    <None Remove="Images\bg_csgo.jpg" />
+    <None Remove="Images\bg_csgo_1.jpg" />
+    <None Remove="Images\bg_dota2.jpg" />
+    <None Remove="Images\bg_fortnite.jpg" />
+    <None Remove="Images\bg_freefire.jpeg" />
+    <None Remove="Images\bg_gta5.jpg" />
+    <None Remove="Images\bg_minecraft.jpg" />
+    <None Remove="Images\bg_pubg.jpg" />
+    <None Remove="Images\bg_rd2.jpg" />
+    <None Remove="Images\bg_roblox.jpg" />
+    <None Remove="Images\bg_tf2.jpg" />
+    <None Remove="Images\bg_valorant.jpg" />
+    <None Remove="Images\bg_warzone.jpg" />
+    <None Remove="Images\gridAllGames.png" />
+    <None Remove="Images\homeImage2.jpg" />
+    <None Remove="Images\homeImage3.jpg" />
+    <None Remove="Images\img1-test.jpg" />
+    <None Remove="Images\img1_csgo.jpg" />
+    <None Remove="Images\img1_dota2.jpg" />
+    <None Remove="Images\img1_freefire.jpg" />
+    <None Remove="Images\img1_gta5.jpg" />
+    <None Remove="Images\img1_minecraft.jpg" />
+    <None Remove="Images\img1_rd2.jpg" />
+    <None Remove="Images\img1_roblox.jpg" />
+    <None Remove="Images\img1_tf2.jpg" />
+    <None Remove="Images\img1_valorant.jpg" />
+    <None Remove="Images\img1_warzone.jpg" />
+    <None Remove="Images\img2-test.jpg" />
+    <None Remove="Images\img2_csgo.jpg" />
+    <None Remove="Images\img2_dota2.jpg" />
+    <None Remove="Images\img2_freefire.jpg" />
+    <None Remove="Images\img2_gta5.jpg" />
+    <None Remove="Images\img2_minecraft.jpg" />
+    <None Remove="Images\img2_rd2.jpg" />
+    <None Remove="Images\img2_roblox.jpg" />
+    <None Remove="Images\img2_tf2.jpg" />
+    <None Remove="Images\img2_valorant.jpg" />
+    <None Remove="Images\img2_warzone.jpg" />
+    <None Remove="Images\img3-test.jpg" />
+    <None Remove="Images\img3_csgo.jpg" />
+    <None Remove="Images\img3_dota2.jpg" />
+    <None Remove="Images\img3_freefire.jpg" />
+    <None Remove="Images\img3_gta5.jpg" />
+    <None Remove="Images\img3_minecraft.jpg" />
+    <None Remove="Images\img3_rd2.jpg" />
+    <None Remove="Images\img3_roblox.jpg" />
+    <None Remove="Images\img3_tf2.jpg" />
+    <None Remove="Images\img3_valorant.jpg" />
+    <None Remove="Images\img3_warzone.jpg" />
+    <None Remove="Images\img4-test.jpg" />
+    <None Remove="Images\img4_csgo.png" />
+    <None Remove="Images\img4_dota2.png" />
+    <None Remove="Images\img4_freefire.png" />
+    <None Remove="Images\img4_gta5.png" />
+    <None Remove="Images\img4_minecraft.png" />
+    <None Remove="Images\img4_rd2.png" />
+    <None Remove="Images\img4_roblox.png" />
+    <None Remove="Images\img4_tf2.png" />
+    <None Remove="Images\img4_valorant.png" />
+    <None Remove="Images\img4_warzone.png" />
+    <None Remove="Images\img5_csgo.png" />
+    <None Remove="Images\img5_dota2.png" />
+    <None Remove="Images\img5_freefire.png" />
+    <None Remove="Images\img5_gta5.png" />
+    <None Remove="Images\img5_minecraft.png" />
+    <None Remove="Images\img5_rd2.png" />
+    <None Remove="Images\img5_roblox.png" />
+    <None Remove="Images\img5_tf2.png" />
+    <None Remove="Images\img5_valorant.png" />
+    <None Remove="Images\img5_warzone.png" />
+    <None Remove="Images\imgUser.jpg" />
+    <None Remove="Images\logoEternal.jpg" />
+    <None Remove="Images\logo_csgo.png" />
+    <None Remove="Images\logo_dota2.png" />
+    <None Remove="Images\logo_fortnite.jpg" />
+    <None Remove="Images\logo_freefire.jpg" />
+    <None Remove="Images\logo_gta5.png" />
+    <None Remove="Images\logo_minecraft.png" />
+    <None Remove="Images\logo_pubg.jpg" />
+    <None Remove="Images\logo_rd2.png" />
+    <None Remove="Images\logo_roblox.jpg" />
+    <None Remove="Images\logo_tf2.png" />
+    <None Remove="Images\logo_valorant.jpg" />
+    <None Remove="Images\logo_warzone.png" />
+    <None Remove="Images\&#xD;&#xA;		  .png" />
+    <None Remove="Images\&#xD;&#xA;		  .png" />
+    <None Remove="Images\woofer1.png" />
+    <None Remove="Images\woofer2.png" />
+    <None Remove="Images\woofer3.png" />
+    <None Remove="Images\woofer4.jpg" />
+  </ItemGroup>
+
+
+
+
+  <ItemGroup>
+    <Content Include="testLogo.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\arrow-right_icon-icons.com_72375.png" />
+    <EmbeddedResource Include="Icons\arrowRight3.png" />
+    <EmbeddedResource Include="Icons\favOff.png" />
+    <EmbeddedResource Include="Icons\favOn.png" />
+    <EmbeddedResource Include="Icons\iconCheckF.png" />
+    <EmbeddedResource Include="Icons\iconDetailProduct.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="AllFonts\Inter-Black.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-BlackItalic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-Bold.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-BoldItalic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-ExtraBold.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-ExtraBoldItalic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-ExtraLight.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-ExtraLightItalic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-Italic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-Light.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-LightItalic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-Medium.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-MediumItalic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-Regular.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-SemiBold.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-SemiBoldItalic.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-Thin.ttf" />
+    <EmbeddedResource Include="AllFonts\Inter-ThinItalic.ttf" />
+    <EmbeddedResource Include="Icons\arrow.png" />
+    <EmbeddedResource Include="Icons\arrowBack.png" />
+    <EmbeddedResource Include="Icons\arrowRight.png" />
+    <EmbeddedResource Include="Icons\checkIcon.png" />
+    <EmbeddedResource Include="Icons\closeIcon.png" />
+    <EmbeddedResource Include="Icons\csIcon.png" />
+    <EmbeddedResource Include="Icons\dcIcon.png" />
+    <EmbeddedResource Include="Icons\downloadIcon.png" />
+    <EmbeddedResource Include="Icons\expandedIcon.png" />
+    <EmbeddedResource Include="Icons\homeIcon.png" />
+    <EmbeddedResource Include="Icons\iconOpenDetails.png" />
+    <EmbeddedResource Include="Icons\iconPreviewSpecial.png" />
+    <EmbeddedResource Include="Icons\iconSignIn.png" />
+    <EmbeddedResource Include="Icons\iconSignUp.png" />
+    <EmbeddedResource Include="Icons\iconTabFav.png" />
+    <EmbeddedResource Include="Icons\iconTabHome.png" />
+    <EmbeddedResource Include="Icons\iconTabProducts.png" />
+    <EmbeddedResource Include="Icons\iconTabUserData.png" />
+    <EmbeddedResource Include="Icons\iconXF.png" />
+    <EmbeddedResource Include="Icons\igIcon.png" />
+    <EmbeddedResource Include="Icons\key_1.png" />
+    <EmbeddedResource Include="Icons\logOutIcon.png" />
+    <EmbeddedResource Include="Icons\playIcon.png" />
+    <EmbeddedResource Include="Icons\playVideoIcon.png" />
+    <EmbeddedResource Include="Icons\txKeyIcon.png" />
+    <EmbeddedResource Include="Icons\txPassIcon.png" />
+    <EmbeddedResource Include="Icons\txUserIcon.png" />
+    <EmbeddedResource Include="Icons\umIcon.png" />
+    <EmbeddedResource Include="Icons\xIcon.png" />
+    <EmbeddedResource Include="Icons\ytIcon.png" />
+    <EmbeddedResource Include="Images\bgLoader1.png" />
+    <EmbeddedResource Include="Images\bg_csgo.jpg" />
+    <EmbeddedResource Include="Images\bg_csgo_1.jpg" />
+    <EmbeddedResource Include="Images\bg_dota2.jpg" />
+    <EmbeddedResource Include="Images\bg_fortnite.jpg" />
+    <EmbeddedResource Include="Images\bg_freefire.jpeg" />
+    <EmbeddedResource Include="Images\bg_gta5.jpg" />
+    <EmbeddedResource Include="Images\bg_minecraft.jpg" />
+    <EmbeddedResource Include="Images\bg_pubg.jpg" />
+    <EmbeddedResource Include="Images\bg_rd2.jpg" />
+    <EmbeddedResource Include="Images\bg_roblox.jpg" />
+    <EmbeddedResource Include="Images\bg_tf2.jpg" />
+    <EmbeddedResource Include="Images\bg_valorant.jpg" />
+    <EmbeddedResource Include="Images\bg_warzone.jpg" />
+    <EmbeddedResource Include="Images\gridAllGames.png" />
+    <EmbeddedResource Include="Images\homeImage2.jpg" />
+    <EmbeddedResource Include="Images\homeImage3.jpg" />
+    <EmbeddedResource Include="Images\img1-test.jpg" />
+    <EmbeddedResource Include="Images\img1_csgo.jpg" />
+    <EmbeddedResource Include="Images\img1_dota2.jpg" />
+    <EmbeddedResource Include="Images\img1_freefire.jpg" />
+    <EmbeddedResource Include="Images\img1_gta5.jpg" />
+    <EmbeddedResource Include="Images\img1_minecraft.jpg" />
+    <EmbeddedResource Include="Images\img1_rd2.jpg" />
+    <EmbeddedResource Include="Images\img1_roblox.jpg" />
+    <EmbeddedResource Include="Images\img1_tf2.jpg" />
+    <EmbeddedResource Include="Images\img1_valorant.jpg" />
+    <EmbeddedResource Include="Images\img1_warzone.jpg" />
+    <EmbeddedResource Include="Images\img2-test.jpg" />
+    <EmbeddedResource Include="Images\img2_csgo.jpg" />
+    <EmbeddedResource Include="Images\img2_dota2.jpg" />
+    <EmbeddedResource Include="Images\img2_freefire.jpg" />
+    <EmbeddedResource Include="Images\img2_gta5.jpg" />
+    <EmbeddedResource Include="Images\img2_minecraft.jpg" />
+    <EmbeddedResource Include="Images\img2_rd2.jpg" />
+    <EmbeddedResource Include="Images\img2_roblox.jpg" />
+    <EmbeddedResource Include="Images\img2_tf2.jpg" />
+    <EmbeddedResource Include="Images\img2_valorant.jpg" />
+    <EmbeddedResource Include="Images\img2_warzone.jpg" />
+    <EmbeddedResource Include="Images\img3-test.jpg" />
+    <EmbeddedResource Include="Images\img3_csgo.jpg" />
+    <EmbeddedResource Include="Images\img3_dota2.jpg" />
+    <EmbeddedResource Include="Images\img3_freefire.jpg" />
+    <EmbeddedResource Include="Images\img3_gta5.jpg" />
+    <EmbeddedResource Include="Images\img3_minecraft.jpg" />
+    <EmbeddedResource Include="Images\img3_rd2.jpg" />
+    <EmbeddedResource Include="Images\img3_roblox.jpg" />
+    <EmbeddedResource Include="Images\img3_tf2.jpg" />
+    <EmbeddedResource Include="Images\img3_valorant.jpg" />
+    <EmbeddedResource Include="Images\img3_warzone.jpg" />
+    <EmbeddedResource Include="Images\img4-test.jpg" />
+    <EmbeddedResource Include="Images\img5_warzone.png" />
+    <EmbeddedResource Include="Images\img4_csgo.png" />
+    <EmbeddedResource Include="Images\img4_dota2.png" />
+    <EmbeddedResource Include="Images\img4_freefire.png" />
+    <EmbeddedResource Include="Images\img4_gta5.png" />
+    <EmbeddedResource Include="Images\img4_minecraft.png" />
+    <EmbeddedResource Include="Images\img4_rd2.png" />
+    <EmbeddedResource Include="Images\img4_roblox.png" />
+    <EmbeddedResource Include="Images\img4_tf2.png" />
+    <EmbeddedResource Include="Images\img4_valorant.png" />
+    <EmbeddedResource Include="Images\img4_warzone.png" />
+    <EmbeddedResource Include="Images\img5_csgo.png" />
+    <EmbeddedResource Include="Images\img5_dota2.png" />
+    <EmbeddedResource Include="Images\img5_freefire.png" />
+    <EmbeddedResource Include="Images\img5_gta5.png" />
+    <EmbeddedResource Include="Images\img5_minecraft.png" />
+    <EmbeddedResource Include="Images\img5_rd2.png" />
+    <EmbeddedResource Include="Images\img5_roblox.png" />
+    <EmbeddedResource Include="Images\img5_tf2.png" />
+    <EmbeddedResource Include="Images\img5_valorant.png" />
+    <EmbeddedResource Include="Images\imgUser.jpg" />
+    <EmbeddedResource Include="Images\logoEternal.jpg" />
+    <EmbeddedResource Include="Images\logo_csgo.png" />
+    <EmbeddedResource Include="Images\logo_dota2.png" />
+    <EmbeddedResource Include="Images\logo_fortnite.jpg" />
+    <EmbeddedResource Include="Images\logo_freefire.jpg" />
+    <EmbeddedResource Include="Images\logo_gta5.png" />
+    <EmbeddedResource Include="Images\logo_minecraft.png" />
+    <EmbeddedResource Include="Images\logo_pubg.jpg" />
+    <EmbeddedResource Include="Images\logo_rd2.png" />
+    <EmbeddedResource Include="Images\logo_roblox.jpg" />
+    <EmbeddedResource Include="Images\logo_tf2.png" />
+    <EmbeddedResource Include="Images\logo_valorant.jpg" />
+    <EmbeddedResource Include="Images\logo_warzone.png" />
+    <EmbeddedResource Include="Images\mainLogo.png" />
+    <EmbeddedResource Include="Images\testLogo.png" />
+    <EmbeddedResource Include="Images\woofer1.png" />
+    <EmbeddedResource Include="Images\woofer2.png" />
+    <EmbeddedResource Include="Images\woofer3.png" />
+    <EmbeddedResource Include="Images\woofer4.jpg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CuoreUI.Winforms" Version="2024.12.7.1" />
+    <PackageReference Include="Guna.UI2.WinForms" Version="2.0.4.6" />
+    <PackageReference Include="InputSimulator" Version="1.0.4" />
+    <PackageReference Include="Ionic.Zip" Version="1.9.1.8" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="DiscordRPC">
+      <HintPath>..\..\PlantillaChanchoV9 - Desktop\PlantillaChanchoV9\Resources\DiscordRPC.dll</HintPath>
+    </Reference>
+    <Reference Include="DiscordRPC">
+      <HintPath>..\..\..\Downloads\DiscordRPC (1).dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,19 @@
+How to Compile the EXE
+
+Follow these steps to compile the .exe:
+
+1. Open Visual Studio.
+
+2. Navigate to the View tab and select Terminal.
+
+3. Paste the following command into the terminal:
+
+
+
+dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+
+
+
+
+
+4. If the process fails, contact Chancho for assistance.
