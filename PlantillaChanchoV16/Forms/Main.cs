@@ -1029,13 +1029,13 @@ namespace PlantillaChanchoV16
         // Pilule horizontale icône + libellé (la largeur s'adapte au texte -> robuste au
         // changement de langue). Repos : icône/texte gris discret. Actif : pilule rose pleine
         // + icône/texte blancs. Survol : léger halo rose.
-        private void TabButtonStyle(Guna2Panel parentPanel, Guna2Button button, Image iconTabButton, string label, Size imgSize)
+        private void TabButtonStyle(Guna2Panel parentPanel, Guna2Button button, Image iconTabButton, string label, Size imgSize, int extraPad = 40)
         {
             var font = new Font("Inter Semibold", 10f);
             // Largeur confortable = icône + texte mesuré + marge (les libellés FR/ES plus
             // longs, ex. "Activer une clé", ne doivent jamais toucher le bord de la pilule).
             int textW = TextRenderer.MeasureText(label, font).Width;
-            int width = imgSize.Width + 10 + textW + 40;
+            int width = imgSize.Width + 10 + textW + extraPad;
 
             button.Size = new Size(width, 40);
             button.Text = label;
@@ -1179,7 +1179,26 @@ namespace PlantillaChanchoV16
 
             // Le groupe d'onglets est ajouté DIRECTEMENT à _contentTabButtons (plus de panneau
             // AutoSize intermédiaire qui pouvait se réduire à 0 et masquer les boutons).
-            var mainTabGroup = CreateTabButtonGroup(new[] { _btnTabHome, _btnTabProducts, _btnTabUserData, _btnClaimKey });
+            var tabButtons = new[] { _btnTabHome, _btnTabProducts, _btnTabUserData, _btnClaimKey };
+            var mainTabGroup = CreateTabButtonGroup(tabButtons);
+
+            // En FR/ES certains libellés (ex. "Activer une clé") sont bien plus longs qu'en
+            // EN -> le groupe peut déborder au-delà de l'espace réservé à droite (pastille
+            // VPN + boutons fenêtre) et se retrouver caché derrière (pastille VPN par-dessus).
+            // On réduit alors la marge interne de chaque bouton (jamais en dessous d'un
+            // minimum confortable) pour que tout rentre dans l'espace réellement disponible,
+            // au lieu d'une marge fixe calée sur la largeur du texte anglais.
+            if (mainTabGroup.Width > _contentTabButtons.Width)
+            {
+                int overflow = mainTabGroup.Width - _contentTabButtons.Width;
+                int newPad = Math.Max(16, 40 - (overflow / tabButtons.Length) - 4);
+                TabButtonStyle(parentContainer, _btnTabHome, images.IconTabHome, Localization.T("nav.home"), new Size(18, 18), newPad);
+                TabButtonStyle(parentContainer, _btnTabProducts, images.IconTabProducts, Localization.T("nav.products"), new Size(18, 18), newPad);
+                TabButtonStyle(parentContainer, _btnTabUserData, images.IconTabUserData, Localization.T("nav.account"), new Size(18, 18), newPad);
+                TabButtonStyle(parentContainer, _btnClaimKey, images.KeyIcon, Localization.T("nav.claim_key"), new Size(16, 16), newPad);
+                mainTabGroup = CreateTabButtonGroup(tabButtons);
+            }
+
             mainTabGroup.Parent = _contentTabButtons;
             mainTabGroup.Location = new Point(0, Math.Max(0, (_contentTabButtons.Height - mainTabGroup.Height) / 2));
             mainTabGroup.BringToFront();
