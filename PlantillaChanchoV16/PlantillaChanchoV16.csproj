@@ -56,8 +56,19 @@
 		<PackageIcon>standard_2.png</PackageIcon>
 		<Copyright></Copyright>
 		<PackageReleaseNotes></PackageReleaseNotes>
-		<RootNamespace>$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
-		<AssemblyName>$(MSBuildProjectName)</AssemblyName>
+		<!-- RootNamespace reste "PlantillaChanchoV16" (touche à ça = casse tous les "using
+		     PlantillaChanchoV16..." + les noms de ressources embarquées genre
+		     "PlantillaChanchoV16.Images.Logo.png" dans tout le code -> gros risque inutile).
+		     AssemblyName en revanche PILOTE le nom du fichier .exe généré : sans ce override,
+		     le build produit TOUJOURS "PlantillaChanchoV16.exe", jamais "PaiPai.exe" -> il
+		     fallait renommer une COPIE à la main à chaque fois, ce qui explique le bug
+		     "l'ancien logo revient après renommage" : une copie manuelle faite depuis un
+		     ancien build reste figée avec l'ancienne icône pour toujours, peu importe le
+		     cache Windows. Avec ceci, `dotnet build`/`publish` produisent NATIVEMENT
+		     "PaiPai.exe" avec la bonne icône à chaque fois -> plus besoin de renommer quoi
+		     que ce soit à la main. -->
+		<RootNamespace>PlantillaChanchoV16</RootNamespace>
+		<AssemblyName>PaiPai</AssemblyName>
 		<ApplicationManifest></ApplicationManifest>
 
 		<!-- Masque les avertissements inoffensifs et bruyants (nullable, obsolète, champs
