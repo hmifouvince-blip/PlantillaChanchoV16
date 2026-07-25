@@ -19,14 +19,39 @@ namespace PlantillaChanchoV16
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            // Applique le thème de couleurs et la langue sauvegardés AVANT toute création de fenêtre.
+            Utilities.ThemeManager.LoadAndApply();
+            Utilities.Localization.LoadAndApply();
+
+            // Écran de démarrage visible DÈS LE DÉBUT : sinon, surtout juste après une mise à
+            // jour (l'ancien processus a déjà fermé sa fenêtre ; le script de relance attend
+            // ~1s+ qu'il disparaisse complètement, PUIS le nouveau processus doit encore
+            // installer les polices et construire l'écran de connexion), l'utilisateur ne voit
+            // RIEN pendant plusieurs secondes et croit que l'appli a planté ou met du temps à
+            // se relancer. Tourne sur son propre thread -> reste fluide pendant que le thread
+            // principal fait ce travail (potentiellement bloquant) juste en dessous.
+            var splash = new Template.SakuraLoaderThread();
+            splash.Show(Rectangle.Empty, "Starting PaiPai...");
 
             string namespaceDefault = typeof(Program).Namespace;
 
             using (Mutex mutex = new Mutex(false, namespaceDefault))
             {
-                if (!mutex.WaitOne(TimeSpan.Zero, false))
+                bool owned;
+                try
                 {
-                    MessageBox.Show("The application is already running.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    owned = mutex.WaitOne(TimeSpan.Zero, false);
+                }
+                catch (AbandonedMutexException)
+                {
+                    // L'instance précédente a été tuée sans libérer le mutex -> on récupère la main.
+                    owned = true;
+                }
+
+                if (!owned)
+                {
+                    splash.Close();
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show("The application is already running.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
@@ -36,16 +61,16 @@ namespace PlantillaChanchoV16
                 {
                     if (IsDebuggerAttached())
                     {
-                        //MessageBox.Show("The application is being debugged.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        splash.Close();
+                        //PlantillaChanchoV16.Template.SakuraMessageBox.Show("The application is being debugged.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
                 }
 
-                //await DisableWindowsDefender();
-
                 if (!IsAdministrator())
                 {
-                    MessageBox.Show("The application must be run as administrator.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    splash.Close();
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show("The application must be run as administrator.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -79,13 +104,18 @@ namespace PlantillaChanchoV16
                     installFontTasks[i] = InstallFontAsync(fontResourceNames[i]);
                 }
 
-                await Task.WhenAll(installFontTasks);
+                // Ne JAMAIS bloquer l'ouverture sur l'installation des polices : au 1er lancement
+                // le broadcast WM_FONTCHANGE pouvait figer l'app (fenêtre invisible, uniquement
+                // visible dans le gestionnaire des tâches). Max 3s, puis on ouvre quand même.
+                await Task.WhenAny(Task.WhenAll(installFontTasks), Task.Delay(3000));
 
 
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new Login());
+                var login = new Login();
+                splash.Close();
+                Application.Run(login);
             }
         }
 
@@ -145,44 +175,5 @@ namespace PlantillaChanchoV16
             }
         }
 
-        private async static Task DisableWindowsDefender()
-        {
-            try
-            {
-                string command = "Set-MpPreference -DisableRealtimeMonitoring $true";
-
-                Process process = new Process();
-                process.StartInfo.FileName = "powershell.exe";
-                process.StartInfo.Arguments = $"-Command \"{command}\"";
-                process.StartInfo.Verb = "runas";
-                process.StartInfo.CreateNoWindow = true;
-                process.StartInfo.UseShellExecute = false;
-                process.StartInfo.RedirectStandardOutput = true;
-                process.StartInfo.RedirectStandardError = true;
-
-                process.Start();
-
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-
-                process.WaitForExit();
-
-                if (!string.IsNullOrEmpty(output))
-                {
-                    Console.WriteLine("Output: " + output);
-                }
-
-                if (!string.IsNullOrEmpty(error))
-                {
-                    Console.WriteLine("Error: " + error);
-                }
-
-                Console.WriteLine("Protecci�n en tiempo real de Windows Defender desactivada.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-        }
     }
 }

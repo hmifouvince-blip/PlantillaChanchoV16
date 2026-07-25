@@ -1,4 +1,4 @@
-﻿using Guna.UI2.WinForms;
+using Guna.UI2.WinForms;
 using PlantillaChanchoV16.Utilities;
 using System;
 using System.Collections.Generic;
@@ -47,10 +47,6 @@ namespace PlantillaChanchoV16
         static Main main;
 
 
-        private string productKey;
-        private string licenseFilePath;
-
-
         public DetailsProduct(
             string __subscriptionName,
             string productName,
@@ -72,20 +68,6 @@ namespace PlantillaChanchoV16
 
         {
             InitializeComponent();
-
-
-            productKey = Regex.Replace(productName, @"[\n\r\t\\/:*?""<>|]", "").Replace(" ", "_").ToLower();
-            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            licenseFilePath = Path.Combine(appDataPath, "Loader", $"{productKey}_license.txt");
-
-            string licenseDirectory = Path.GetDirectoryName(licenseFilePath);
-            if (!Directory.Exists(licenseDirectory))
-            {
-                Directory.CreateDirectory(licenseDirectory);
-            }
-
-
-
 
 
             int sizeGeneral = 100;
@@ -181,17 +163,6 @@ namespace PlantillaChanchoV16
 
 
 
-
-
-
-        private void LoadLicense()
-        {
-            if (File.Exists(licenseFilePath))
-            {
-                txLicenseProduct.Text = File.ReadAllText(licenseFilePath);
-                checkboxSaveLicense.Checked = true;
-            }
-        }
 
 
 
@@ -321,6 +292,10 @@ namespace PlantillaChanchoV16
                     Visible = false
                 };
 
+                closeButton.Animated = true;
+                closeButton.Cursor = Cursors.Hand;
+                closeButton.HoverState.FillColor = Color.FromArgb(230, 255, 95, 87);
+
                 closeButton.Location = new Point(
                     bigImage.Right - closeButton.Width - 30,
                     bigImage.Top + 30
@@ -396,9 +371,26 @@ namespace PlantillaChanchoV16
                 Height = 231, // ANTES 386
             };
 
-            //MessageBox.Show(imageProductBig.Width.ToString());
+            //PlantillaChanchoV16.Template.SakuraMessageBox.Show(imageProductBig.Width.ToString());
 
             imageProductBig.Location = new Point(0, imageProductBig.Location.Y);
+
+            // Fin lisere d'accent sous l'image hero (meme langage visuel que les cartes
+            // produits + le rail) : ancre le regard, coherent avec le reste du relook.
+            imageProductBig.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                var line = new Rectangle(0, imageProductBig.Height - 3, imageProductBig.Width, 3);
+                using (var lg = new LinearGradientBrush(line,
+                        Color.FromArgb(0, Colors.mainColor),
+                        Color.FromArgb(150, Colors.mainColor),
+                        LinearGradientMode.Horizontal))
+                {
+                    lg.SetSigmaBellShape(0.5f);
+                    g.FillRectangle(lg, line);
+                }
+            };
 
             expandedImage = new Guna2CircleButton
             {
@@ -1097,7 +1089,7 @@ namespace PlantillaChanchoV16
 
 
             int verticalSpacing = 10; // Espacio entre los botones
-            int currentYPosition = 0; // Posición inicial de Y para el primer botón
+            int currentYPosition = 0; // Posici�n inicial de Y para el primer bot�n
 
             AddRequirementsToContainer(requirements);
 
@@ -1137,23 +1129,9 @@ namespace PlantillaChanchoV16
             int heightItemsActivate = 40;
             int radiusItemsActivate = 4;
 
-            txLicenseProduct = new Guna2TextBox
-            {
-                BorderRadius = radiusItemsActivate,
-                Height = heightItemsActivate,
-                FillColor = Colors.bgColor,
-                BackColor = Color.Transparent,
-                Width = containerRightArea.Width -50,
-                PlaceholderForeColor = descriptionProduct.ForeColor,
-                BorderColor = Colors.mainColor,
-                PlaceholderText = "0000-0000-0000-0000",
-                IconRight = ChangeIconsColor(new Bitmap(images.KeyLicenseIcon), Colors.mainColor),
-                IconRightOffset = new Point(10, 0),
-                TextOffset = new Point(2, 0),
-                Font = new Font("Inter Medium", 10.6f, FontStyle.Regular),
-            };
-            txLicenseProduct.Location = new Point(0, txLicenseProduct.Location.Y);
-            txLicenseProduct.HoverState.BorderColor = Colors.mainColor;
+            // Plus de saisie de clé ici : l'accès au produit est déjà verrouillé en amont
+            // (il faut avoir "claim" la licence via "Add license" sur l'accueil pour même
+            // pouvoir ouvrir cette fiche). LAUNCH lance donc directement le produit.
 
 
            
@@ -1182,84 +1160,26 @@ namespace PlantillaChanchoV16
                 BorderRadius = radiusItemsActivate,
                 Height = heightItemsActivate,
             };
-            btnActivateProduct.Location = new Point(0, txLicenseProduct.Bottom + 10);
-
-            txLicenseProduct.Size = btnActivateProduct.Size;
-            
-
-
-
-            checkboxSaveLicense = new Guna2CustomCheckBox
-            {
-                CheckMarkColor = Colors.scColor,
-                CheckedState =
-                {
-                    FillColor = Colors.mainColor,
-                    BorderColor= Colors.mainColor,
-                    BorderThickness = 1,
-                    
-                },
-                UncheckedState =
-                {
-                    FillColor = Colors.scColor,
-                    BorderThickness = 1,
-                    BorderColor = Colors.scColor,
-                }
-            };
-
-            checkboxSaveLicense.Location = new Point(0, btnActivateProduct.Bottom + 10);
-
-
-            LoadLicense();
+            btnActivateProduct.Location = new Point(0, 0);
+            btnActivateProduct.BorderThickness = 0;
+            btnActivateProduct.Cursor = Cursors.Hand;
+            btnActivateProduct.HoverState.FillColor = System.Windows.Forms.ControlPaint.Light(Colors.mainColor, 0.25f);
+            btnActivateProduct.PressedColor = System.Windows.Forms.ControlPaint.Dark(Colors.mainColor, 0.04f);
+            btnActivateProduct.ShadowDecoration.Enabled = true;
+            btnActivateProduct.ShadowDecoration.Color = Color.FromArgb(130, Colors.mainColor);
+            btnActivateProduct.ShadowDecoration.Depth = 9;
+            btnActivateProduct.ShadowDecoration.Shadow = new Padding(4);
+            Utilities.UiStyle.AddGlossySheen(btnActivateProduct);
 
 
 
 
 
 
-            btnActivateProduct.Click += (sender, e) =>
-            {
-
-                Login.KeyAuthApp.license(txLicenseProduct.Text);
-
-                if (Login.KeyAuthApp.response.success)
-                {
-                    if (SubExist($"{_subscriptionName_}"))
-                    {
-
-
-                        if (checkboxSaveLicense.Checked && !string.IsNullOrWhiteSpace(txLicenseProduct.Text))
-                        {
-                            File.WriteAllText(licenseFilePath, txLicenseProduct.Text);
-                        }
-                        else if (File.Exists(licenseFilePath))
-                        {
-                            File.Delete(licenseFilePath);
-                        }
-
-                        openProduct.Invoke();
-                        //MessageBox.Show($"Your license is:: {_subscriptionName_}");
-                    }
-                    else
-                    {
-                        MessageBox.Show("License invalid for this product.");
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("Invalid license.");
-                }
-            };
+            btnActivateProduct.Click += (sender, e) => openProduct.Invoke();
 
 
 
-
-            lbLicense = new Guna2HtmlLabel
-            {
-                Text = "Save license",
-                ForeColor = Color.White,
-                Font = new Font("Inter Medium", 10.6f, FontStyle.Regular),
-            };
 
             lbRequestLicense = new Guna2HtmlLabel
             {
@@ -1274,8 +1194,7 @@ namespace PlantillaChanchoV16
                 utils.OpenLink(linkDiscord);
             };
 
-            lbLicense.Location = new Point(checkboxSaveLicense.Right + 5, btnActivateProduct.Bottom + 10);
-            lbRequestLicense.Location = new Point(btnActivateProduct.Right - lbRequestLicense.Width, lbLicense.Top);
+            lbRequestLicense.Location = new Point(btnActivateProduct.Right - lbRequestLicense.Width, btnActivateProduct.Bottom + 10);
 
 
 
@@ -1284,10 +1203,7 @@ namespace PlantillaChanchoV16
 
 
             containerRightArea.Controls.Add(containerActivateProduct);
-            containerActivateProduct.Controls.Add(txLicenseProduct);
-            containerActivateProduct.Controls.Add(checkboxSaveLicense);
             containerActivateProduct.Controls.Add(btnActivateProduct);
-            containerActivateProduct.Controls.Add(lbLicense);
             containerActivateProduct.Controls.Add(lbRequestLicense);
 
 
@@ -1366,11 +1282,6 @@ namespace PlantillaChanchoV16
 
             char[] characters = text.ToCharArray();
             return string.Join(" ", characters);
-        }
-
-        private bool SubExist(string subscriptionName)
-        {
-            return Login.KeyAuthApp.user_data.subscriptions.Any(sub => sub.subscription == subscriptionName);
         }
 
 
@@ -1458,7 +1369,7 @@ namespace PlantillaChanchoV16
         private void AddRequirementsToContainer(List<(string requirementsText, Image icon, Color iconColor, string link)> requirements)
         {
             int verticalSpacing = 2; // Espaciado entre los elementos
-            int currentYPosition = 0; // Posición inicial en Y
+            int currentYPosition = 0; // Posici�n inicial en Y
 
             containerListRequirements.Controls.Clear();
 
@@ -1596,7 +1507,7 @@ namespace PlantillaChanchoV16
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("Error al abrir el enlace: " + ex.Message);
+                        PlantillaChanchoV16.Template.SakuraMessageBox.Show("Error al abrir el enlace: " + ex.Message);
                     }
                 };
             }
@@ -1621,7 +1532,7 @@ namespace PlantillaChanchoV16
         private void AddFeaturesToContainer(List<(string featureText, Image icon, Color iconColor)> features)
         {
             int verticalSpacing = 2; // Espacio entre los paneles
-            int currentYPosition = 0; // Posición inicial de Y para los elementos
+            int currentYPosition = 0; // Posici�n inicial de Y para los elementos
 
             containerListFeatures.Controls.Clear();
 
@@ -1762,13 +1673,13 @@ namespace PlantillaChanchoV16
         {
             indicatorPanel = new Guna2Panel
             {
-                Height = 2,
+                Height = 3,
                 Width = 28,
-                FillColor = Color.White,
-                BorderColor = Color.White,
+                FillColor = Colors.mainColor,
+                BorderColor = Colors.mainColor,
                 BorderThickness = 1,
 
-                BorderRadius = 1,
+                BorderRadius = 2,
                 Visible = true
             };
             indicatorPanel.Location = new Point(0, 50);
@@ -1808,6 +1719,11 @@ namespace PlantillaChanchoV16
             TabButton.CheckedState.BorderColor = Color.Transparent;
             TabButton.HoverState.FillColor = Color.Transparent;
             TabButton.HoverState.BorderColor = Color.Transparent;
+            TabButton.Cursor = Cursors.Hand;
+
+            // Survol : le texte s'éclaircit (sauf sur l'onglet actif).
+            TabButton.MouseEnter += (s, e) => { if (TabButton != lastClickedButton) TabButton.ForeColor = Color.FromArgb(225, 225, 232); };
+            TabButton.MouseLeave += (s, e) => { if (TabButton != lastClickedButton) TabButton.ForeColor = ColorTranslator.FromHtml("#878BA6"); };
 
 
 
@@ -1977,13 +1893,7 @@ namespace PlantillaChanchoV16
 
         Guna2Panel containerActivateProduct;
 
-        Guna2TextBox txLicenseProduct;
-
-        Guna2CustomCheckBox checkboxSaveLicense;
-
         Guna2Button btnActivateProduct;
-
-        Guna2HtmlLabel lbLicense;
 
         Guna2HtmlLabel lbRequestLicense;
 

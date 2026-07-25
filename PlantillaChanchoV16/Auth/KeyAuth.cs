@@ -41,7 +41,7 @@ namespace KeyAuth
         /// <param name="name">Application Name</param>
         /// <param name="ownerid">Your OwnerID, found in your account settings.</param>
         /// <param name="version">Application Version, if version doesnt match it will open the download link you set up in your application settings and close the app, if empty the app will close</param>
-        public api(string name, string ownerid, string version, string path = null)
+        public api(string name, string ownerid, string version, string path = null, string secret = null)
         {
             if (ownerid.Length != 10)
             {
@@ -598,6 +598,14 @@ namespace KeyAuth
             var json = response_decoder.string_to_generic<response_structure>(response);
             if (json.ownerid == ownerid)
             {
+                // Quirk KeyAuth : l'endpoint "upgrade" renvoie toujours success=false dans le
+                // champ affiché (il faut lire response.message pour savoir si ça a marché).
+                // MAIS le serveur renvoie quand même les infos utilisateur à jour (dont la
+                // nouvelle souscription) dans "info" quand le upgrade a réellement réussi :
+                // on les charge ici pour que user_data.subscriptions soit à jour sans
+                // reconnexion (nécessaire pour savoir quel produit vient d'être ajouté).
+                if (json.info != null)
+                    load_user_data(json.info);
                 json.success = false;
                 load_response_struct(json);
             }

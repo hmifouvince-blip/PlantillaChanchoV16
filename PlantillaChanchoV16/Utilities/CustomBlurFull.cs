@@ -1,8 +1,10 @@
-﻿using Guna.UI2.WinForms;
+using Guna.UI2.WinForms;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 public class BlurPanelFull : Guna2Panel
@@ -11,7 +13,10 @@ public class BlurPanelFull : Guna2Panel
     private float blurAmount = 5.0f;
 
     private static List<BlurPanelFull> activeBlurPanels = new List<BlurPanelFull>();
-    private static int processedBlurCount = 0;
+    // Suivi par-panneau (voir CustomBlur.cs / BlurPanel pour l'explication complète) : un
+    // compteur monotone comparé à une liste qui rétrécit/grandit se désynchronise
+    // définitivement après une reconstruction de fenêtre.
+    private static readonly HashSet<BlurPanelFull> paintedPanels = new HashSet<BlurPanelFull>();
     public static event Action AllBlurPanelsProcessed;
 
     public Color BlurColor { get; set; } = Color.Transparent;
@@ -64,15 +69,21 @@ public class BlurPanelFull : Guna2Panel
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Error al aplicar desenfoque: {ex.Message}");
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show($"Error al aplicar desenfoque: {ex.Message}");
                 }
             }
 
             lock (activeBlurPanels)
             {
-                processedBlurCount++;
-                if (processedBlurCount == activeBlurPanels.Count)
+                paintedPanels.Add(this);
+                bool allDone = activeBlurPanels.Count > 0;
+                if (allDone)
+                    foreach (var p in activeBlurPanels)
+                        if (!paintedPanels.Contains(p)) { allDone = false; break; }
+
+                if (allDone)
                 {
+                    paintedPanels.Clear();
                     AllBlurPanelsProcessed?.Invoke();
                 }
             }
@@ -107,6 +118,9 @@ public class BlurPanelFull : Guna2Panel
         }
     }
 
+    // Flou gaussien RAPIDE (LockBits + noyau SÉPARABLE en 2 passes 1D) — voir CustomBlur.cs
+    // pour l'explication complète. Remplace la version pixel-par-pixel (GetPixel/SetPixel)
+    // qui prenait plusieurs secondes = onglet produits qui "ramait" au 1er affichage.
     private void ApplyGaussianBlur(Bitmap bitmap, float blurAmount, Color blurColor)
     {
         if (blurAmount <= 0)
@@ -114,72 +128,94 @@ public class BlurPanelFull : Guna2Panel
 
         int width = bitmap.Width;
         int height = bitmap.Height;
-        Bitmap blurredBitmap = new Bitmap(width, height);
-        int radius = (int)Math.Ceiling(blurAmount);
+        if (width <= 0 || height <= 0)
+            return;
 
+        int radius = (int)Math.Ceiling(blurAmount);
         int kernelSize = 2 * radius + 1;
-        double[,] kernel = new double[kernelSize, kernelSize];
+        float[] kernel = new float[kernelSize];
         double sigma = blurAmount / 2.0;
         double sum = 0.0;
-
-        for (int y = 0; y < kernelSize; y++)
+        for (int i = 0; i < kernelSize; i++)
         {
-            for (int x = 0; x < kernelSize; x++)
+            int d = i - radius;
+            kernel[i] = (float)Math.Exp(-(d * d) / (2 * sigma * sigma));
+            sum += kernel[i];
+        }
+        for (int i = 0; i < kernelSize; i++)
+            kernel[i] = (float)(kernel[i] / sum);
+
+        Rectangle rect = new Rectangle(0, 0, width, height);
+        BitmapData srcData = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        int stride = srcData.Stride;
+        byte[] src = new byte[stride * height];
+        Marshal.Copy(srcData.Scan0, src, 0, src.Length);
+        bitmap.UnlockBits(srcData);
+
+        int n = width * height;
+        float[] tmpR = new float[n];
+        float[] tmpG = new float[n];
+        float[] tmpB = new float[n];
+        for (int y = 0; y < height; y++)
+        {
+            int rowBase = y * stride;
+            for (int x = 0; x < width; x++)
             {
-                int dx = x - radius;
-                int dy = y - radius;
-                kernel[x, y] = Math.Exp(-(dx * dx + dy * dy) / (2 * sigma * sigma)) / (2 * Math.PI * sigma * sigma);
-                sum += kernel[x, y];
+                float r = 0, g = 0, b = 0;
+                for (int k = -radius; k <= radius; k++)
+                {
+                    int xx = x + k;
+                    if (xx < 0) xx = 0; else if (xx >= width) xx = width - 1;
+                    int idx = rowBase + xx * 4;
+                    float w = kernel[k + radius];
+                    b += src[idx] * w;
+                    g += src[idx + 1] * w;
+                    r += src[idx + 2] * w;
+                }
+                int o = y * width + x;
+                tmpR[o] = r; tmpG[o] = g; tmpB[o] = b;
             }
         }
 
-        for (int y = 0; y < kernelSize; y++)
-        {
-            for (int x = 0; x < kernelSize; x++)
-            {
-                kernel[x, y] /= sum;
-            }
-        }
-
+        byte[] dst = new byte[stride * height];
+        const float blend = 0.5f;
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                double red = 0, green = 0, blue = 0;
-
-                for (int ky = -radius; ky <= radius; ky++)
+                float r = 0, g = 0, b = 0;
+                for (int k = -radius; k <= radius; k++)
                 {
-                    for (int kx = -radius; kx <= radius; kx++)
-                    {
-                        int pixelX = Math.Min(Math.Max(x + kx, 0), width - 1);
-                        int pixelY = Math.Min(Math.Max(y + ky, 0), height - 1);
-                        Color pixelColor = bitmap.GetPixel(pixelX, pixelY);
-
-                        double weight = kernel[kx + radius, ky + radius];
-
-                        red += pixelColor.R * weight;
-                        green += pixelColor.G * weight;
-                        blue += pixelColor.B * weight;
-                    }
+                    int yy = y + k;
+                    if (yy < 0) yy = 0; else if (yy >= height) yy = height - 1;
+                    int o = yy * width + x;
+                    float w = kernel[k + radius];
+                    r += tmpR[o] * w;
+                    g += tmpG[o] * w;
+                    b += tmpB[o] * w;
                 }
-
-                double blendFactor = 0.5;
-                int finalRed = (int)(red * (1 - blendFactor) + blurColor.R * blendFactor);
-                int finalGreen = (int)(green * (1 - blendFactor) + blurColor.G * blendFactor);
-                int finalBlue = (int)(blue * (1 - blendFactor) + blurColor.B * blendFactor);
-
-                Color newColor = Color.FromArgb(
-                    Math.Min(Math.Max(finalRed, 0), 255),
-                    Math.Min(Math.Max(finalGreen, 0), 255),
-                    Math.Min(Math.Max(finalBlue, 0), 255)
-                );
-
-                blurredBitmap.SetPixel(x, y, newColor);
+                int idx = y * stride + x * 4;
+                dst[idx] = ClampByte(b * (1 - blend) + blurColor.B * blend);
+                dst[idx + 1] = ClampByte(g * (1 - blend) + blurColor.G * blend);
+                dst[idx + 2] = ClampByte(r * (1 - blend) + blurColor.R * blend);
+                dst[idx + 3] = 255;
             }
         }
 
+        Bitmap blurredBitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        BitmapData dstData = blurredBitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        Marshal.Copy(dst, 0, dstData.Scan0, dst.Length);
+        blurredBitmap.UnlockBits(dstData);
+
         bitmap.Dispose();
         cachedBitmap = blurredBitmap;
+    }
+
+    private static byte ClampByte(float v)
+    {
+        if (v < 0) return 0;
+        if (v > 255) return 255;
+        return (byte)v;
     }
 
     protected override void Dispose(bool disposing)
@@ -191,6 +227,7 @@ public class BlurPanelFull : Guna2Panel
             lock (activeBlurPanels)
             {
                 activeBlurPanels.Remove(this);
+                paintedPanels.Remove(this);
             }
         }
         base.Dispose(disposing);

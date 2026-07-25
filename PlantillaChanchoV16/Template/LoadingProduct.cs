@@ -1,4 +1,4 @@
-ï»¿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -50,6 +50,17 @@ namespace PlantillaChanchoV16
             };
 
             CreateItemsGame(logoProduct, logoSize, bgImage, productName, productDescription);
+
+            // Overlay de chargement sakura (indéterminé, fluide) par-dessus toute la fenêtre.
+            // L'ancienne barre de progression reste dessous mais invisible : plus aucune
+            // sensation de "chargement qui s'arrête puis reprend".
+            _sakuraLoader = new Template.SakuraLoadingScreen(this.Width, this.Height, "PaiPai", $"Launching {productName}...")
+            {
+                Location = new Point(0, 0),
+                Parent = this
+            };
+            _sakuraLoader.BringToFront();
+
             initProduct(downloadURL, exeFileNames);
 
             //globalKeyHook = new Utils.GlobalKeyHook(this, dt);
@@ -164,7 +175,7 @@ namespace PlantillaChanchoV16
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"An error occurred while moving executables: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show($"An error occurred while moving executables: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     break;
                 }
             }
@@ -178,7 +189,7 @@ namespace PlantillaChanchoV16
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"An unexpected error occurred during the file update. Please contact support [ {Default.oficialDeveloperName} ] to resolve this issue. We apologize for any inconvenience caused. \n\n Error type 1", "Unexpected Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show($"An unexpected error occurred during the file update. Please contact support [ {Default.oficialDeveloperName} ] to resolve this issue. We apologize for any inconvenience caused. \n\n Error type 1", "Unexpected Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -215,13 +226,15 @@ namespace PlantillaChanchoV16
                         File.Delete(fullExePath);
                 }
 
-                await Task.Delay(5000);
+                await Task.Delay(2000);
 
                 await webclient.DownloadFileTaskAsync(new Uri(fileUrl), zipFilePath);
 
-                ExtractZipFile(zipFilePath, Login.Path1, "1");
+                // Extraction sur un thread de fond : le thread UI reste libre,
+                // l'animation sakura ne freeze plus pendant le déballage du ZIP.
+                await Task.Run(() => ExtractZipFile(zipFilePath, Login.Path1, "1"));
 
-                await Task.Delay(3000);
+                await Task.Delay(1000);
 
                 AccelerateProgressBarTo100(exeFileNames);
 
@@ -230,7 +243,7 @@ namespace PlantillaChanchoV16
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"An unexpected error occurred during the file update. Please contact support [ {Default.oficialDeveloperName} ] to resolve this issue. We apologize for any inconvenience caused. \n\n Error type 2", "Unexpected Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show($"An unexpected error occurred during the file update. Please contact support [ {Default.oficialDeveloperName} ] to resolve this issue. We apologize for any inconvenience caused. \n\n Error type 2", "Unexpected Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
                 utils.ApplyFadeOutAnimation(this, () =>
                 {
@@ -270,10 +283,7 @@ namespace PlantillaChanchoV16
                     currentProgress = 100;
                     progressTimer.Stop();
 
-                    foreach (var exeFileName in exeFileNames)
-                    {
-                        LaunchExecutable(exeFileName);
-                    }
+                    LaunchFirstAvailable(exeFileNames);
 
                     utils.ApplyFadeOutAnimation(this, () =>
                     {
@@ -296,36 +306,46 @@ namespace PlantillaChanchoV16
             progressTimer.Start();
         }
 
-        private void LaunchExecutable(string exeFileName)
+        // Launches the FIRST executable that actually exists among the candidate names.
+        // This lets us list several possible exe names per product (e.g. "Roblox.exe",
+        // "Roblox.bat") without showing an error for the variants that aren't present.
+        // An error is shown only if NONE of the candidates were found.
+        private void LaunchFirstAvailable(List<string> exeFileNames)
         {
-            try
-            {
-                string[] paths = { Login.Path1, Login.Path2, Login.Path3 };
+            string[] paths = { Login.Path1, Login.Path2, Login.Path3 };
 
+            foreach (var exeFileName in exeFileNames)
+            {
                 foreach (var path in paths)
                 {
                     string fullPath = Path.Combine(path, exeFileName);
 
                     if (File.Exists(fullPath))
                     {
-                        ProcessStartInfo startInfo = new ProcessStartInfo
+                        try
                         {
-                            FileName = fullPath,
-                            UseShellExecute = true,
-                            Verb = "runas"
-                        };
+                            ProcessStartInfo startInfo = new ProcessStartInfo
+                            {
+                                FileName = fullPath,
+                                UseShellExecute = true,
+                                Verb = "runas"
+                            };
 
-                        Process.Start(startInfo);
-                        return;
+                            Process.Start(startInfo);
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            PlantillaChanchoV16.Template.SakuraMessageBox.Show($"An unexpected error occurred while launching the executable: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
                     }
                 }
+            }
 
-                MessageBox.Show($"Executable not found in any of the specified paths: {string.Join(", ", paths)}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"An unexpected error occurred while launching the executable: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                $"No executable found inside the downloaded file.\n\nExpected one of: {string.Join(", ", exeFileNames)}\n\nMake sure the .zip you uploaded contains a file with one of those names.",
+                "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
 
@@ -356,7 +376,7 @@ namespace PlantillaChanchoV16
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"An unexpected error occurred during the file update. Please contact support [ {Default.oficialDeveloperName} ] to resolve this issue. We apologize for any inconvenience caused. \n\n Error type 4", "Unexpected Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show($"An unexpected error occurred during the file update. Please contact support [ {Default.oficialDeveloperName} ] to resolve this issue. We apologize for any inconvenience caused. \n\n Error type 4", "Unexpected Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
                 utils.ApplyFadeOutAnimation(this, () =>
                 {
@@ -424,6 +444,8 @@ namespace PlantillaChanchoV16
         private Guna2Button productInfoName;
 
         private Guna2HtmlLabel productInfoDescription;
+
+        private Template.SakuraLoadingScreen _sakuraLoader;
 
         Guna2ProgressBar loading;
 

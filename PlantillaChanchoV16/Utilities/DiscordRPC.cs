@@ -28,8 +28,7 @@ namespace PlantillaChanchoV16.Utilities
             client.Initialize();
 
             DiscordRPC.Button[] buttons = {
-                new DiscordRPC.Button() { Label = "CUSTOM DESIGN", Url = "https://discord.gg/WHm7nezB87" },
-                new DiscordRPC.Button() { Label = "BUY PROJECT", Url = "https://discord.gg/WHm7nezB87" },
+                new DiscordRPC.Button() { Label = "Join PaiPai", Url = "https://discord.gg/paipai" },
             };
 
             startTime = DateTime.UtcNow;
@@ -39,13 +38,13 @@ namespace PlantillaChanchoV16.Utilities
             {
                 Buttons = buttons,
                 Timestamps = rpctimestamp,
+                Details = "Cooking",
+                State = "PaiPai",
 
                 Assets = new Assets()
                 {
-                    LargeImageKey = "panel_chancho_safe",
-                    LargeImageText = "CHANCHO",
-                    SmallImageKey = "https://i.pinimg.com/originals/6b/17/28/6b17287c0580c33894286a585bdd3f07.gif",
-                    SmallImageText = ""
+                    LargeImageKey = "paipai",   // asset "paipai" à uploader dans le Discord Dev Portal (le logo)
+                    LargeImageText = "PaiPai",
                 }
             };
 
@@ -67,29 +66,11 @@ namespace PlantillaChanchoV16.Utilities
 
         public static void UpdateDiscordPresence(object sender = null, ElapsedEventArgs e = null)
         {
+            presence.Details = "Cooking";
             if (Login.KeyAuthApp.response.success)
-            {
-                string username = Login.KeyAuthApp.user_data.username;
-                string expiryString = Login.KeyAuthApp.user_data.subscriptions?.FirstOrDefault()?.expiry;
-
-                if (!string.IsNullOrEmpty(expiryString) && long.TryParse(expiryString, out long expiryUnixTime))
-                {
-                    DateTime expiryDateTime = UnixTimeToDateTime(expiryUnixTime);
-
-                    presence.Details = $"Username: {username}";
-                    presence.State = $"Expiry: { expiryDateTime: dd - MM - yyyy}";
-                }
-                else
-                {
-                    presence.Details = $"Usuario: {username}";
-                    presence.State = "No subscriptions";
-                }
-            }
+                presence.State = "PaiPai · " + Login.KeyAuthApp.user_data.username;
             else
-            {
-                presence.Details = "USER";
-                presence.State = StatusText;
-            }
+                presence.State = "PaiPai";
 
             presence.Timestamps = new Timestamps(startTime);
             client.SetPresence(presence);

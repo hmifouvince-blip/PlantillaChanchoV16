@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -244,7 +244,7 @@ namespace PlantillaChanchoV16.Utilities
                 sb.AppendLine("dnSpy");
             }
 
-            MessageBox.Show(sb.ToString(), "Programas Instalados", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            PlantillaChanchoV16.Template.SakuraMessageBox.Show(sb.ToString(), "Programas Instalados", MessageBoxButtons.OK, MessageBoxIcon.Information);
             Environment.Exit(0);
         }
 

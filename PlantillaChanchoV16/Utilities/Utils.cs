@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -36,11 +36,16 @@ namespace PlantillaChanchoV16.Utilities
 
         public class FadeAnimation
         {
-            private Form form;
-            private Timer timer;
-            private bool fadeIn;
-            private double opacityStep;
-            private const double OpacityIncrement = 0.05;
+            private readonly Form form;
+            private readonly Timer timer;
+            private readonly bool fadeIn;
+            private Action onCompleted;
+
+            // Higher frame rate (~66 fps) + smaller step = visibly smoother fade.
+            private const int FrameIntervalMs = 15;
+            private const double OpacityIncrement = 0.08;
+
+            private readonly double opacityStep;
 
             public FadeAnimation(Form form, bool fadeIn, double opacityStep = OpacityIncrement)
             {
@@ -48,13 +53,14 @@ namespace PlantillaChanchoV16.Utilities
                 this.fadeIn = fadeIn;
                 this.opacityStep = opacityStep;
 
-                timer = new Timer();
-                timer.Interval = 20;
+                timer = new Timer { Interval = FrameIntervalMs };
                 timer.Tick += Timer_Tick;
             }
 
             public void Start(Action onCompleted = null)
             {
+                this.onCompleted = onCompleted;
+
                 if (fadeIn)
                 {
                     form.Opacity = 0;
@@ -66,49 +72,48 @@ namespace PlantillaChanchoV16.Utilities
                 }
 
                 timer.Start();
-
-                if (!fadeIn)
-                {
-                    timer.Tick += (sender, e) =>
-                    {
-                        if (form.Opacity <= 0)
-                        {
-                            form.Opacity = 0;
-                            timer.Stop();
-                            form.Hide();
-                            onCompleted?.Invoke();
-                        }
-                    };
-                }
             }
 
             private void Timer_Tick(object sender, EventArgs e)
             {
                 if (fadeIn)
                 {
-                    if (form.Opacity < 1)
-                    {
-                        form.Opacity += opacityStep;
-                    }
-                    else
+                    double next = form.Opacity + EasedStep(form.Opacity);
+                    if (next >= 1)
                     {
                         form.Opacity = 1;
                         timer.Stop();
+                        onCompleted?.Invoke();
+                    }
+                    else
+                    {
+                        form.Opacity = next;
                     }
                 }
                 else
                 {
-                    if (form.Opacity > 0)
-                    {
-                        form.Opacity -= opacityStep;
-                    }
-                    else
+                    double next = form.Opacity - EasedStep(form.Opacity);
+                    if (next <= 0)
                     {
                         form.Opacity = 0;
                         timer.Stop();
                         form.Hide();
+                        onCompleted?.Invoke();
+                    }
+                    else
+                    {
+                        form.Opacity = next;
                     }
                 }
+            }
+
+            // Ease-out: move a bit faster in the middle, gently near the ends,
+            // so the fade feels natural instead of perfectly linear.
+            private double EasedStep(double currentOpacity)
+            {
+                double distanceToEdge = Math.Min(currentOpacity, 1 - currentOpacity);
+                double factor = 0.5 + distanceToEdge;   // 0.5x near edges, up to 1x mid
+                return opacityStep * factor;
             }
         }
 
@@ -245,7 +250,7 @@ namespace PlantillaChanchoV16.Utilities
                 }
             }
         }
-        public class GlobalKeyHook
+        public class GlobalKeyHook : IDisposable
         {
             private Main loadingForm;
             private InputSimulator inputSimulator;
@@ -268,6 +273,12 @@ namespace PlantillaChanchoV16.Utilities
                     UnhookWindowsHookEx(hookId);
                     hookId = IntPtr.Zero;
                 }
+            }
+
+            // Retire le hook clavier système (sinon il fuit à chaque reconstruction de fenêtre).
+            public void Dispose()
+            {
+                UnhookKeyboard();
             }
 
             private IntPtr SetHook(LowLevelKeyboardProc proc)
@@ -408,52 +419,46 @@ namespace PlantillaChanchoV16.Utilities
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"No se pudo abrir el enlace: {ex.Message}");
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show($"No se pudo abrir el enlace: {ex.Message}");
             }
         }
 
 
         // CAMBIAR COLOR A ICONOS
-        public static async Task<Bitmap> ChangeIconsColorAsync(Bitmap originalImage, Color newColor)
-        {
-            return await Task.Run(() =>
-            {
-                Bitmap newImage = new Bitmap(originalImage.Width, originalImage.Height);
-
-                for (int y = 0; y < originalImage.Height; y++)
-                {
-                    for (int x = 0; x < originalImage.Width; x++)
-                    {
-                        Color originalColor = originalImage.GetPixel(x, y);
-                        if (originalColor.A > 0)
-                        {
-                            newImage.SetPixel(x, y, Color.FromArgb(originalColor.A, newColor.R, newColor.G, newColor.B));
-                        }
-                    }
-                }
-
-                return newImage;
-            });
-        }
-
-
+        // Recolore une icône : conserve l'alpha de chaque pixel, remplace le RGB par newColor.
+        // Ancienne implémentation en GetPixel/SetPixel = très lente (verrou bitmap par pixel).
+        // Version ColorMatrix = un seul DrawImage (résultat identique, bien plus rapide).
         public static Bitmap ChangeIconsColor(Bitmap originalImage, Color newColor)
         {
-            Bitmap newImage = new Bitmap(originalImage.Width, originalImage.Height);
+            var newImage = new Bitmap(originalImage.Width, originalImage.Height,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
-            for (int y = 0; y < originalImage.Height; y++)
+            // Sortie RGB = newColor (via la translation, dernière ligne), sortie A = A source.
+            var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
             {
-                for (int x = 0; x < originalImage.Width; x++)
-                {
-                    Color originalColor = originalImage.GetPixel(x, y);
-                    if (originalColor.A > 0)
-                    {
-                        newImage.SetPixel(x, y, Color.FromArgb(originalColor.A, newColor.R, newColor.G, newColor.B));
-                    }
-                }
-            }
+                new float[] { 0, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 1, 0 },
+                new float[] { newColor.R / 255f, newColor.G / 255f, newColor.B / 255f, 0, 1 }
+            });
 
+            using (var g = Graphics.FromImage(newImage))
+            using (var attrs = new System.Drawing.Imaging.ImageAttributes())
+            {
+                attrs.SetColorMatrix(matrix);
+                g.DrawImage(originalImage,
+                    new Rectangle(0, 0, newImage.Width, newImage.Height),
+                    0, 0, originalImage.Width, originalImage.Height,
+                    GraphicsUnit.Pixel, attrs);
+            }
             return newImage;
+        }
+
+        // Version asynchrone conservée pour compat (le recolorage est désormais rapide).
+        public static Task<Bitmap> ChangeIconsColorAsync(Bitmap originalImage, Color newColor)
+        {
+            return Task.Run(() => ChangeIconsColor(originalImage, newColor));
         }
 
 

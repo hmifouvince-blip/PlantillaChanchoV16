@@ -1,4 +1,4 @@
-﻿using Guna.UI2.WinForms;
+using Guna.UI2.WinForms;
 using PlantillaChanchoV16.Utilities;
 using System;
 using System.Drawing;
@@ -224,7 +224,7 @@ namespace PlantillaChanchoV16.Template
 
                 BtnStart.Click += (s, e) =>
                 {
-                    MessageBox.Show("This product is currently under maintenance. Please try again later.",
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show("This product is currently under maintenance. Please try again later.",
                     "Maintenance Notice",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);

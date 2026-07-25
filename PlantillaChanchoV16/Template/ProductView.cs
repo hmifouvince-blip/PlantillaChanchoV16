@@ -23,7 +23,6 @@ namespace PlantillaChanchoV16.Template
             SetStyle(ControlStyles.AllPaintingInWmPaint, true);
             SetStyle(ControlStyles.UserPaint, true);
 
-            Image = productImage;
             FillColor = Color.Transparent;
             UseTransparentBackground = true;
             Width = widthProduct;
@@ -31,8 +30,8 @@ namespace PlantillaChanchoV16.Template
             BackColor = Color.Transparent;
             BorderRadius = 10;
             BorderThickness = 9;
-            //this.BorderStyle = BorderStyle.None;
-            //this.SizeMode = PictureBoxSizeMode.StretchImage;
+            // Recadrage "cover" centré : l'image remplit la carte sans déformation.
+            Image = CropToAspect(productImage, Width, Height);
             ImageSize = new Size(Width + 0, Height + 0);
             ImageOffset = new Point(0, 0);
             BorderColor = Colors.bgColor;
@@ -42,10 +41,128 @@ namespace PlantillaChanchoV16.Template
 
             CreateItemsProduct(productActive, productUnderMaintenance, productName, updateProduct, productLogo, productImage, openDetailsProduct);
 
+            AttachHoverEffect();
 
 
 
 
+
+        }
+
+        // ---- Interactions modernes : survol = soulèvement + halo rose ; clic = pression ----
+        private readonly Color _idleBorder = Colors.bgColor;
+        // Bouton flèche discret (ghost) au repos, rose au survol -> "se fond dans le décor".
+        private readonly Color _arrowIdle = Color.FromArgb(55, 255, 255, 255);
+        private bool _hovered = false;
+        private bool _pressed = false;
+        private bool _baseCaptured = false;
+        private int _baseTop;
+        private System.Windows.Forms.Timer _liftTimer;
+        // Intensité du survol (0 = repos, 1 = survolé), animée en fondu -> le halo rose monte
+        // et descend en douceur au lieu d'apparaître d'un coup (rendu premium).
+        private float _hoverGlow = 0f;
+        private float _glowTarget = 0f;
+
+        private void AttachHoverEffect()
+        {
+            _liftTimer = new System.Windows.Forms.Timer { Interval = 15 };
+            _liftTimer.Tick += (s, e) =>
+            {
+                float diff = _glowTarget - _hoverGlow;
+                if (Math.Abs(diff) <= 0.04f) { _hoverGlow = _glowTarget; _liftTimer.Stop(); }
+                else _hoverGlow += diff * 0.25f;
+                Invalidate();
+            };
+
+            AttachHoverRecursive(this);
+        }
+
+        private static Color LerpColor(Color a, Color b, float t)
+        {
+            if (t < 0) t = 0; else if (t > 1) t = 1;
+            return Color.FromArgb(
+                (int)(a.A + (b.A - a.A) * t),
+                (int)(a.R + (b.R - a.R) * t),
+                (int)(a.G + (b.G - a.G) * t),
+                (int)(a.B + (b.B - a.B) * t));
+        }
+
+        private void AttachHoverRecursive(Control control)
+        {
+            control.MouseEnter += (s, e) => SetHover(true);
+            control.MouseLeave += (s, e) =>
+            {
+                // On ne retire le survol que si le curseur a réellement quitté la carte
+                // (les enfants déclenchent MouseLeave quand on passe de l'un à l'autre).
+                Point cursor = PointToClient(Cursor.Position);
+                if (!ClientRectangle.Contains(cursor)) SetHover(false);
+            };
+            control.MouseDown += (s, e) => SetPressed(true);
+            control.MouseUp += (s, e) => SetPressed(false);
+
+            // Toute la carte est cliquable pour ouvrir le produit (sauf le bouton flèche,
+            // qui déclenche déjà l'ouverture -> évite un double-déclenchement).
+            if (control != btnStartProduct)
+                control.Click += (s, e) => { if (_openable) openDetailsProduct?.Invoke(); };
+
+            foreach (Control child in control.Controls)
+                AttachHoverRecursive(child);
+        }
+
+        private void SetHover(bool hovered)
+        {
+            if (!_baseCaptured) { _baseTop = Top; _baseCaptured = true; }
+            if (_hovered == hovered) return;
+            _hovered = hovered;
+            if (btnStartProduct != null)
+                btnStartProduct.FillColor = hovered ? Colors.mainColor : _arrowIdle;
+            // Fondu du halo (la couleur de bordure/accent est calculée dans Paint à partir de
+            // _hoverGlow). Pas de déplacement de la carte : ça faisait trembler (le curseur
+            // sortait de la carte déplacée -> leave/enter en boucle).
+            _glowTarget = hovered ? 1f : 0f;
+            _liftTimer?.Start();
+        }
+
+        private void SetPressed(bool pressed)
+        {
+            _pressed = pressed;
+        }
+
+        // Animation d'apparition : la carte glisse doucement vers le haut jusqu'à sa place.
+        private System.Windows.Forms.Timer _entranceTimer;
+        public void PlayEntrance(int delayMs)
+        {
+            int finalTop = Top;
+            _baseTop = finalTop; _baseCaptured = true; // évite une mauvaise capture pendant l'anim
+            Top = finalTop + 26;
+
+            var delay = new System.Windows.Forms.Timer { Interval = Math.Max(1, delayMs) };
+            delay.Tick += (s, e) =>
+            {
+                delay.Stop(); delay.Dispose();
+                _entranceTimer?.Stop();
+                _entranceTimer = new System.Windows.Forms.Timer { Interval = 15 };
+                _entranceTimer.Tick += (s2, e2) =>
+                {
+                    int diff = finalTop - Top;
+                    if (Math.Abs(diff) <= 1) { Top = finalTop; _entranceTimer.Stop(); }
+                    else Top += (int)(diff / 2.5);
+                };
+                _entranceTimer.Start();
+            };
+            delay.Start();
+        }
+
+        // Libère les timers d'animation (survol + apparition) sinon ils fuient à chaque
+        // reconstruction de la fenêtre (changement de thème / langue).
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _liftTimer?.Stop(); _liftTimer?.Dispose();
+                _entranceTimer?.Stop(); _entranceTimer?.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         protected override CreateParams CreateParams
@@ -58,6 +175,41 @@ namespace PlantillaChanchoV16.Template
             }
         }
 
+
+        // Recadre l'image en "cover" centré vers la taille cible (aucune déformation).
+        private static Image CropToAspect(Image src, int w, int h)
+        {
+            if (src == null || w <= 0 || h <= 0) return src;
+            try
+            {
+                float targetAspect = (float)w / h;
+                float srcAspect = (float)src.Width / src.Height;
+                Rectangle crop;
+                if (srcAspect > targetAspect)
+                {
+                    int cw = (int)(src.Height * targetAspect);
+                    int cx = (src.Width - cw) / 2;
+                    crop = new Rectangle(cx, 0, cw, src.Height);
+                }
+                else
+                {
+                    int ch = (int)(src.Width / targetAspect);
+                    int cy = (src.Height - ch) / 2;
+                    crop = new Rectangle(0, cy, src.Width, ch);
+                }
+
+                var bmp = new Bitmap(w, h);
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                    g.SmoothingMode = SmoothingMode.HighQuality;
+                    g.DrawImage(src, new Rectangle(0, 0, w, h), crop, GraphicsUnit.Pixel);
+                }
+                return bmp;
+            }
+            catch { return src; }
+        }
 
         public void RoundGunaButtonCorners(Guna2Button button, int cornerRadius)
         {
@@ -75,9 +227,48 @@ namespace PlantillaChanchoV16.Template
 
             button.Paint += (s, e) =>
             {
-                e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
-                e.Graphics.FillPath(new SolidBrush(button.FillColor), path);
-                e.Graphics.DrawPath(new Pen(button.BorderColor, button.BorderThickness), path);
+                var g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.HighQuality;
+
+                // Plus d'allocation inutile par frame : le fond est transparent (l'image est
+                // peinte par le Guna2Button, découpée par la Region) -> on saute le remplissage.
+                if (button.FillColor.A > 0)
+                    using (var br = new SolidBrush(button.FillColor)) g.FillPath(br, path);
+
+                // Bordure : fond -> rose sakura selon l'intensité de survol (_hoverGlow, en
+                // fondu animé) au lieu d'un basculement instantané = rendu premium.
+                Color bc = LerpColor(_idleBorder, Colors.mainColor, _hoverGlow);
+                if (button.BorderThickness > 0)
+                    using (var pen = new Pen(bc, button.BorderThickness)) g.DrawPath(pen, path);
+
+                var oldClip = g.Clip;
+                g.SetClip(path);
+
+                // Fin liseré d'accent en haut (façon gaming hub) : discret au repos, vif au survol.
+                int topAlpha = (int)(70 + 150 * _hoverGlow);
+                var top = new Rectangle(0, 0, buttonRect.Width, 3);
+                using (var lg = new LinearGradientBrush(top,
+                        Color.FromArgb(0, Colors.mainColor),
+                        Color.FromArgb(topAlpha, Colors.mainColor),
+                        LinearGradientMode.Horizontal))
+                {
+                    lg.SetSigmaBellShape(0.5f);
+                    g.FillRectangle(lg, top);
+                }
+
+                // Au survol : léger halo rose qui remonte du bas de la carte (lumière douce).
+                if (_hoverGlow > 0.01f && buttonRect.Height > 70)
+                {
+                    int gh = 70;
+                    var glowRect = new Rectangle(0, buttonRect.Height - gh, buttonRect.Width, gh);
+                    using (var gg = new LinearGradientBrush(glowRect,
+                            Color.FromArgb(0, Colors.mainColor),
+                            Color.FromArgb((int)(55 * _hoverGlow), Colors.mainColor),
+                            LinearGradientMode.Vertical))
+                        g.FillRectangle(gg, glowRect);
+                }
+
+                g.Clip = oldClip;
             };
         }
 
@@ -97,8 +288,13 @@ namespace PlantillaChanchoV16.Template
 
 
 
+        private bool _openable = true;
+
         private void CreateItemsProduct(bool productActive, bool productUnderMaintenance, string productName, string updateProduct, Image productLogo, Image productImage, Action openDetailsProduct)
         {
+            this.openDetailsProduct = openDetailsProduct;
+            // Un produit inactif ou en maintenance ne s'ouvre pas au clic sur la carte.
+            _openable = productActive && !productUnderMaintenance;
 
             BlurPanelFull panel = new BlurPanelFull
             {
@@ -266,19 +462,20 @@ namespace PlantillaChanchoV16.Template
 
             btnStartProduct = new Guna2Button
             {
-                FillColor = Colors.mainColor,
-                Image = Utils.ChangeIconsColor(new Bitmap(images.IconOpenDetails), Color.White),
-                Size = new Size(34, 34),
+                FillColor = _arrowIdle,   // discret par défaut : se fond dans la carte
+                Image = Utils.ChangeIconsColor(new Bitmap(images.IconOpenDetails), Color.FromArgb(210, 255, 255, 255)),
+                Size = new Size(36, 36),
                 ImageSize = new Size(14, 14),
                 ImageAlign = HorizontalAlignment.Center,
                 ImageOffset = new Point(0, 0),
-                BorderRadius = 4,
-                BorderColor = Colors.mainColor,
-                BorderThickness = 1,
+                BorderRadius = 9,
+                BorderColor = _arrowIdle,
+                BorderThickness = 0,
                 BackColor = Color.Transparent,
                 UseTransparentBackground = true,
-                Animated= true,
+                Animated = true,
             };
+            btnStartProduct.HoverState.FillColor = Colors.mainColor;
             btnStartProduct.Location = new Point(containerInfoProduct.Right - btnStartProduct.Width - 14, (containerInfoProduct.Height - btnStartProduct.Height) / 2);
 
 

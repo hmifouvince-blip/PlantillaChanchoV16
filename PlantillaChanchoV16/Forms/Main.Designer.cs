@@ -39,7 +39,7 @@
             Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "Main";
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "Eternal";
+            Text = "PaiPai";
             FormClosing += Main_FormClosing;
             ResumeLayout(false);
         }

@@ -1,4 +1,4 @@
-﻿using CuoreUI.Components;
+using CuoreUI.Components;
 using Guna.UI2.WinForms;
 using PlantillaChanchoV16.Utilities;
 using System;
@@ -18,10 +18,14 @@ namespace PlantillaChanchoV16
 {
     public partial class Login : Form
     {
+        // Version de CE build. Pour publier une MAJ : incrémente-la, recompile, héberge le
+        // nouveau .exe, et mets la variable KeyAuth "update_version" à la même valeur + "update_link".
+        public const string AppVersion = "1.0";
+
         public static api KeyAuthApp = new api(
              name: "Mamadou.segpa0909's Application", // App name
              ownerid: "1JtLfVtXO3", // Account ID
-             version: "1.0"
+             version: AppVersion
         );
 
         private GlobalKeyHook globalKeyHook;
@@ -46,6 +50,19 @@ namespace PlantillaChanchoV16
 
         private Default DefaultForm;
 
+        // ---- Nouvelle interface sakura (carte centr�e sur fond anim�) ----
+        private Template.SakuraPetalsBackground _sakuraBg;
+        private Guna2Panel _card;
+        private Guna2Panel _loginFields, _registerFields;
+        private Guna2Panel _toggleTrack, _toggleIndicator;
+        private Guna2Button _btnToggleSignIn, _btnToggleSignUp, _btnPrimary;
+        private Guna2HtmlLabel _tagline;
+        private bool _isSignIn = true;
+        private Timer _toggleAnim;
+        private int _toggleTargetX;
+        private Guna2CustomCheckBox _rememberCheck;
+        private Guna2HtmlLabel _rememberLabel;
+
         public Login()
         {
             InitializeComponent();
@@ -59,22 +76,21 @@ namespace PlantillaChanchoV16
             }
             ConfigureFormSettings();
             InitializeBorderlessForm();
-            InitializeMainContainer();
 
-            CreateNav();
-            AddLogoNav(_containerNav);
-            GenerateInterface(_containerNav);
-            CreateItemsSignIn();
-            CreateItemsSignUp();
+            BuildSakuraBackground();
+            BuildCard();
             CreateItemsLoading();
 
             ConfigureUtils();
-            ConfigureContainerAppearance();
 
-            SetBackgroundImage();
-            _btnTabSignIn.PerformClick();
+            ShowTab(true);
+            LoadRememberedCredentials();
             this.AutoScaleMode = AutoScaleMode.Dpi;
             _utils.ApplyFadeInAnimation(this);
+
+            // Pause des animations quand la fenêtre n'est pas au premier plan.
+            this.Activated += (s, e) => Utilities.AnimationHub.Focused = true;
+            this.Deactivate += (s, e) => Utilities.AnimationHub.Focused = false;
 
 
             DefaultForm = new Default();
@@ -82,6 +98,282 @@ namespace PlantillaChanchoV16
             {
                 InitializeProcessCheckTimer();
                 ProcessChecker.ShowDetectedPrograms();
+            }
+        }
+
+        // ===================== NOUVELLE INTERFACE SAKURA =====================
+
+        private void BuildSakuraBackground()
+        {
+            _sakuraBg = new Template.SakuraPetalsBackground
+            {
+                Parent = this,
+                Dock = DockStyle.Fill
+            };
+            _sakuraBg.SendToBack();
+        }
+
+        private const int CardW = 380, CardH = 470, CardPad = 34;
+        private int InnerW => CardW - CardPad * 2;
+
+        private void BuildCard()
+        {
+            _card = new Guna2Panel
+            {
+                Parent = _sakuraBg,
+                Size = new Size(CardW, CardH),
+                Location = new Point((this.ClientSize.Width - CardW) / 2, (this.ClientSize.Height - CardH) / 2),
+                FillColor = Color.FromArgb(235, 30, 20, 32),   // carte sombre l�g�rement translucide
+                BorderRadius = 16,
+                BorderThickness = 1,
+                BorderColor = Color.FromArgb(70, 244, 114, 182)
+            };
+            _card.ShadowDecoration.Enabled = true;
+            _card.ShadowDecoration.Color = Color.FromArgb(120, 0, 0, 0);
+
+            // Accents d'angle "HUD" (meme signature que la banniere d'accueil) -> cohérence
+            // visuelle login <-> app. Purement peint, ne touche a aucune logique.
+            _card.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var ap = new Pen(Colors.mainColor, 2f))
+                {
+                    int L = 16, m = 10;
+                    g.DrawLine(ap, m, m + 7, m, m);
+                    g.DrawLine(ap, m, m, m + L, m);
+                    g.DrawLine(ap, CardW - m, CardH - m - 7, CardW - m, CardH - m);
+                    g.DrawLine(ap, CardW - m, CardH - m, CardW - m - L, CardH - m);
+                }
+            };
+
+            // ---- Wordmark PaiPai (deux tons) ----
+            var pai1 = new Guna2HtmlLabel { Parent = _card, Text = "Pai", ForeColor = Color.White, Font = new Font("Inter Semibold", 25f), AutoSize = true, IsSelectionEnabled = false };
+            var pai2 = new Guna2HtmlLabel { Parent = _card, Text = "Pai", ForeColor = Colors.mainColor, Font = new Font("Inter Semibold", 25f), AutoSize = true, IsSelectionEnabled = false };
+            int wmW = pai1.Width + pai2.Width;
+            int wmX = (CardW - wmW) / 2;
+            pai1.Location = new Point(wmX, 28);
+            pai2.Location = new Point(wmX + pai1.Width, 28);
+
+            // ---- Tagline (change selon l'onglet) ----
+            _tagline = new Guna2HtmlLabel
+            {
+                Parent = _card,
+                Text = Localization.T("login.tagline_signin"),
+                ForeColor = Color.FromArgb(170, 255, 255, 255),
+                Font = new Font("Inter Medium", 10.5f),
+                AutoSize = true,
+                IsSelectionEnabled = false
+            };
+            _tagline.Location = new Point((CardW - _tagline.Width) / 2, pai1.Bottom + 8);
+
+            // ---- Toggle Sign In / Sign Up ----
+            BuildToggle(108);
+
+            // ---- Champs ----
+            _loginFields = new Guna2Panel { Parent = _card, FillColor = Color.Transparent, BorderThickness = 0, Location = new Point(CardPad, 170), Size = new Size(InnerW, 102) };
+            _usernameL = MakeField(Localization.T("login.field_username"), _images.UserIcon, 0);
+            _passwordL = MakeField(Localization.T("login.field_password"), _images.PassIcon, 57);
+            _passwordL.UseSystemPasswordChar = true;
+            _loginFields.Controls.Add(_usernameL);
+            _loginFields.Controls.Add(_passwordL);
+
+            // ---- "Remember me" (sign-in seulement) ----
+            _rememberCheck = new Guna2CustomCheckBox
+            {
+                Parent = _card,
+                Size = new Size(18, 18),
+                Location = new Point(CardPad, 278),
+                Animated = true
+            };
+            _rememberCheck.CheckedState.FillColor = Colors.mainColor;
+            _rememberCheck.CheckedState.BorderColor = Colors.mainColor;
+            _rememberCheck.UncheckedState.FillColor = Colors.scColor;
+            _rememberCheck.UncheckedState.BorderColor = Colors.scColor;
+            _rememberLabel = new Guna2HtmlLabel
+            {
+                Parent = _card,
+                Text = Localization.T("login.remember_me"),
+                ForeColor = Color.FromArgb(180, 255, 255, 255),
+                Font = new Font("Inter Medium", 9.5f),
+                AutoSize = true,
+                Cursor = Cursors.Hand,
+                IsSelectionEnabled = false,
+                Location = new Point(CardPad + 26, 279)
+            };
+            _rememberLabel.Click += (s, e) => _rememberCheck.Checked = !_rememberCheck.Checked;
+
+            _registerFields = new Guna2Panel { Parent = _card, FillColor = Color.Transparent, BorderThickness = 0, Location = new Point(CardPad, 170), Size = new Size(InnerW, 159), Visible = false };
+            _usernameR = MakeField(Localization.T("login.field_username"), _images.UserIcon, 0);
+            _passwordR = MakeField(Localization.T("login.field_password"), _images.PassIcon, 57);
+            _passwordR.UseSystemPasswordChar = true;
+            _licenseR = MakeField(Localization.T("login.field_license"), _images.KeyIcon, 114);
+            _registerFields.Controls.Add(_usernameR);
+            _registerFields.Controls.Add(_passwordR);
+            _registerFields.Controls.Add(_licenseR);
+
+            // ---- Bouton principal ----
+            _btnPrimary = new Guna2Button
+            {
+                Parent = _card,
+                Text = Localization.T("login.btn_signin"),
+                Font = new Font("Inter Semibold", 11.5f),
+                ForeColor = Color.White,
+                FillColor = Colors.mainColor,
+                BorderRadius = 9,
+                Size = new Size(InnerW, 46),
+                Location = new Point(CardPad, 308),
+                Animated = true,
+                Cursor = Cursors.Hand
+            };
+            // Finition premium : halo rose + éclaircissement au survol + enfoncement au clic.
+            _btnPrimary.ShadowDecoration.Enabled = true;
+            _btnPrimary.ShadowDecoration.Color = Color.FromArgb(130, Colors.mainColor);
+            _btnPrimary.ShadowDecoration.Depth = 9;
+            _btnPrimary.ShadowDecoration.Shadow = new Padding(4);
+            _btnPrimary.HoverState.FillColor = ControlPaint.Light(Colors.mainColor, 0.18f);
+            _btnPrimary.PressedColor = ControlPaint.Dark(Colors.mainColor, 0.04f);
+            Utilities.UiStyle.AddGlossySheen(_btnPrimary);
+            _btnPrimary.Click += (s, e) => SubmitCurrentTab();
+
+            // ---- Lien Discord discret ----
+            var discord = new Guna2HtmlLabel
+            {
+                Parent = _card,
+                Text = Localization.T("login.discord_help"),
+                ForeColor = Color.FromArgb(150, 255, 255, 255),
+                Font = new Font("Inter Medium", 9.5f),
+                AutoSize = true,
+                Cursor = Cursors.Hand,
+                IsSelectionEnabled = false
+            };
+            discord.Click += (s, e) => _utils.OpenLink("https://discord.gg/paipai");
+            _discordLink = discord;
+        }
+
+        private Guna2HtmlLabel _discordLink;
+
+        private Guna2TextBox MakeField(string placeholder, Image icon, int y)
+        {
+            var b = CreateTextBox(_card, "", placeholder, icon);
+            b.Width = InnerW;
+            b.Location = new Point(0, y);
+            return b;
+        }
+
+        private void BuildToggle(int y)
+        {
+            _toggleTrack = new Guna2Panel
+            {
+                Parent = _card,
+                Location = new Point(CardPad, y),
+                Size = new Size(InnerW, 40),
+                FillColor = Colors.scColor,
+                BorderRadius = 10,
+                BorderThickness = 0
+            };
+
+            int half = InnerW / 2;
+            _toggleIndicator = new Guna2Panel
+            {
+                Parent = _toggleTrack,
+                Location = new Point(3, 3),
+                Size = new Size(half - 4, 34),
+                FillColor = Colors.mainColor,
+                BorderRadius = 8,
+                BorderThickness = 0
+            };
+
+            _btnToggleSignIn = MakeToggleButton(Localization.T("login.tab_signin"), 0, half);
+            _btnToggleSignUp = MakeToggleButton(Localization.T("login.tab_signup"), half, half);
+            _btnToggleSignIn.Click += (s, e) => ShowTab(true);
+            _btnToggleSignUp.Click += (s, e) => ShowTab(false);
+
+            _toggleAnim = new Timer { Interval = 12 };
+            _toggleAnim.Tick += (s, e) =>
+            {
+                int cur = _toggleIndicator.Left;
+                int diff = _toggleTargetX - cur;
+                if (Math.Abs(diff) <= 2) { _toggleIndicator.Left = _toggleTargetX; _toggleAnim.Stop(); }
+                else _toggleIndicator.Left = cur + diff / 3;
+            };
+        }
+
+        private Guna2Button MakeToggleButton(string text, int x, int w)
+        {
+            var b = new Guna2Button
+            {
+                Parent = _toggleTrack,
+                Text = text,
+                Font = new Font("Inter Medium", 10.5f),
+                ForeColor = Color.White,
+                FillColor = Color.Transparent,
+                BorderThickness = 0,
+                UseTransparentBackground = true,
+                Location = new Point(x, 0),
+                Size = new Size(w, 40),
+                Cursor = Cursors.Hand
+            };
+            b.HoverState.FillColor = Color.Transparent;
+            b.PressedColor = Color.Transparent;
+            b.BringToFront();
+            return b;
+        }
+
+        private void ShowTab(bool signIn)
+        {
+            _isSignIn = signIn;
+
+            _loginFields.Visible = signIn;
+            _registerFields.Visible = !signIn;
+
+            _tagline.Text = signIn ? Localization.T("login.tagline_signin") : Localization.T("login.tagline_signup");
+            _tagline.Location = new Point((CardW - _tagline.Width) / 2, _tagline.Location.Y);
+
+            _btnPrimary.Text = signIn ? Localization.T("login.btn_signin") : Localization.T("login.btn_create_account");
+            int btnY = signIn ? 308 : 345;
+            _btnPrimary.Location = new Point(CardPad, btnY);
+
+            // "Remember me" visible seulement sur l'onglet Sign In.
+            if (_rememberCheck != null) _rememberCheck.Visible = signIn;
+            if (_rememberLabel != null) _rememberLabel.Visible = signIn;
+
+            if (_discordLink != null)
+            {
+                _discordLink.Location = new Point((CardW - _discordLink.Width) / 2, btnY + 62);
+            }
+
+            // Animation du curseur du toggle.
+            _toggleTargetX = signIn ? 3 : (InnerW / 2) + 1;
+            if (_toggleAnim != null) { _toggleAnim.Stop(); _toggleAnim.Start(); }
+        }
+
+        private void SubmitCurrentTab()
+        {
+            if (_isSignIn) CheckLogin();
+            else CheckRegister();
+        }
+
+        // Entr�e = valider le formulaire courant (fonctionne quel que soit le champ focalis�).
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Enter && _card != null && _card.Visible)
+            {
+                SubmitCurrentTab();
+                return true;
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        // Pr�-remplit les identifiants sauvegard�s ("Remember me").
+        private void LoadRememberedCredentials()
+        {
+            var saved = RememberMe.Load();
+            if (saved.HasValue)
+            {
+                _usernameL.Text = saved.Value.username;
+                _passwordL.Text = saved.Value.password;
+                if (_rememberCheck != null) _rememberCheck.Checked = true;
             }
         }
 
@@ -143,7 +435,7 @@ namespace PlantillaChanchoV16
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al crear carpetas: " + ex.Message);
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Error al crear carpetas: " + ex.Message);
             }
         }
 
@@ -208,10 +500,9 @@ namespace PlantillaChanchoV16
         {
             this.Width = 812;
             this.Height = 503;
-            this.TopMost = true;
-            this.ShowInTaskbar = false;
-            this.BringToFront();
-            this.TopMost = false;
+            // Visible dans la barre des tâches (sinon la fenêtre n'apparaît que dans le
+            // gestionnaire des tâches et on ne peut pas la ramener au 1er plan).
+            this.ShowInTaskbar = true;
         }
 
         private void InitializeBorderlessForm()
@@ -325,6 +616,15 @@ namespace PlantillaChanchoV16
             _containerLoadingProduct.Controls.Add(pictureBox1);
             this.Controls.Add(_containerLoadingProduct);
             _containerLoadingProduct.BringToFront();
+
+            // �cran de chargement sakura fluide par-dessus l'ancienne barre de progression.
+            var sakuraLogin = new Template.SakuraLoadingScreen(
+                _containerLoadingProduct.Width, _containerLoadingProduct.Height, "PaiPai", "Connecting...")
+            {
+                Location = new Point(0, 0),
+                Parent = _containerLoadingProduct
+            };
+            sakuraLogin.BringToFront();
         }
 
 
@@ -334,85 +634,47 @@ namespace PlantillaChanchoV16
 
 
 
-        private void InitializeTimerLoading()
+        private async void InitializeTimerLoading()
         {
-            int duration = 2000;
-            int steps = 100;
-            int interval = duration / steps;
+            // UN SEUL loader, sur thread s�par�, qui couvre TOUTE la transition :
+            // construction ET premier affichage de Main. Ferm� seulement � la fin.
+            // -> pas de double-chargement, et aucun freeze visible (m�me pendant le rendu de Main).
+            var loader = new Template.SakuraLoaderThread();
+            loader.Show(this.Bounds, "Loading...");
 
-            Timer progressTimer = new Timer
+            try
             {
-                Interval = interval
-            };
-            Main main = new Main();
+                Main main = new Main();
 
-            int currentProgress = 0;
-            int totalProgress = 100;
+                main.StartPosition = FormStartPosition.Manual;
+                main.Location = this.Location;
+                main.ShowInTaskbar = true;
+                main.Show();
 
-            progressTimer.Tick += async (s, e) =>
+                // Ajuste le loader pour couvrir exactement Main (qui est un peu plus grande).
+                loader.UpdateBounds(main.Bounds);
+
+                // Laisse Main terminer son premier rendu, toujours cach� par le loader.
+                await Task.Delay(450);
+
+                // Synchronise la position puis masque le login.
+                main.LocationChanged += (s, e) => this.Location = main.Location;
+                this.Hide();
+                main.Activate();
+                main.BringToFront();
+
+                try { Class1.UpdateDiscordPresence(); } catch { }
+            }
+            catch (Exception ex)
             {
-                currentProgress++;
-                loading.Value = currentProgress;
-                _porcentaje.Text = $"{currentProgress}%";
-
-                if (currentProgress == 20)
-                {
-                    main.StartPosition = FormStartPosition.Manual;
-                    main.Location = new Point(this.Left - 1000, this.Top - 1000);
-                    main.Opacity = 0;
-                    main.ShowInTaskbar = false;
-                    await Task.Delay(500);
-
-                    IntPtr hWnd = main.Handle;
-                    int exStyle = WindowsImport.GetWindowLong(hWnd, WindowsImport.GWL_EXSTYLE);
-                    exStyle |= WindowsImport.WS_EX_TOOLWINDOW;
-                    exStyle &= ~WindowsImport.WS_EX_APPWINDOW;
-                    WindowsImport.SetWindowLong(hWnd, WindowsImport.GWL_EXSTYLE, exStyle);
-                    main.ShowInTaskbar = false;
-
-                    main.Show();
-                }
-
-                if (currentProgress >= totalProgress)
-                {
-                    progressTimer.Stop();
-                    _utils.ApplyFadeOutAnimation(this, () =>
-                    {
-                        this.Hide();
-                    });
-
-                    await Task.Delay(1000);
-                    IntPtr hWnd = this.Handle;
-                    int exStyle = WindowsImport.GetWindowLong(hWnd, WindowsImport.GWL_EXSTYLE);
-                    exStyle &= ~WindowsImport.WS_EX_TOOLWINDOW;
-                    exStyle |= WindowsImport.WS_EX_APPWINDOW;
-                    WindowsImport.SetWindowLong(hWnd, WindowsImport.GWL_EXSTYLE, exStyle);
-                    main.ShowInTaskbar = true;
-
-                    await Task.Delay(100);
-
-                    main.Opacity = 1;
-                    main.ShowInTaskbar = true;
-                    _utils.ApplyFadeInAnimation(main);
-                    main.Location = this.Location;
-
-                    main.LocationChanged += (s, e) => this.Location = main.Location;
-                    this.LocationChanged += (s, e) => main.Location = this.Location;
-                    main.TopMost = true;
-
-                    try
-                    {
-                        Class1.UpdateDiscordPresence();
-
-                    }
-                    catch (Exception ex)
-                    {
-
-                    }
-                }
-            };
-
-            progressTimer.Start();
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Error while loading the app: " + ex.Message, "PaiPai",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                await Task.Delay(120);
+                loader.Close();
+            }
         }
 
 
@@ -428,65 +690,147 @@ namespace PlantillaChanchoV16
 
 
 
+
+        // Ensures KeyAuthApp.init() is only called once for the whole app lifetime.
+        // Re-calling init() on every button click creates a new session each time,
+        // spawns extra background threads and can trigger KeyAuth's rate limit.
+        private static bool _keyAuthInitialized = false;
+
+        private bool EnsureKeyAuthInitialized()
+        {
+            if (_keyAuthInitialized)
+                return true;
+
+            try
+            {
+                KeyAuthApp.init();
+
+                // Auto-update : KeyAuth signale une version obsol�te -> on met � jour.
+                // Auto-update via 2 variables KeyAuth que tu controles :
+                //   update_version = derniere version dispo (ex "1.1")
+                //   update_link    = lien direct vers le nouveau PaiPai.exe
+                if (Updater.CheckAndUpdate())
+                    return false; // l'app va se relancer sur la nouvelle version
+
+                _keyAuthInitialized = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                    "KeyAuth initialization failed:\n\n" + ex.Message +
+                    "\n\nCheck that the Application Name, OwnerID and Version in Login.cs match your KeyAuth dashboard exactly.",
+                    "KeyAuth error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
 
         private async void CheckLogin()
         {
-            //_containerSignIn.Visible = false;
-            //_containerNav.Visible = false;
-            //_containerLoadingProduct.Visible = true;
-            //await Task.Delay(300);
-            //InitializeTimerLoading();
+            if (string.IsNullOrWhiteSpace(_usernameL.Text) || string.IsNullOrWhiteSpace(_passwordL.Text))
+            {
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Please enter your username and password.", "Login", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
+            await Task.Delay(150);
 
+            // Init KeyAuth (réseau) en arrière-plan -> plus de gel de l'interface au sign in.
+            if (!_keyAuthInitialized)
+            {
+                Exception initEx = null;
+                await Task.Run(() => { try { KeyAuthApp.init(); } catch (Exception ex) { initEx = ex; } });
+                if (initEx != null)
+                {
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                        "KeyAuth initialization failed:\n\n" + initEx.Message, "KeyAuth error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                if (Updater.CheckAndUpdate())
+                    return; // une MAJ est en cours, l'app va se relancer
+                _keyAuthInitialized = true;
+            }
 
-            await Task.Delay(300);
-
-            KeyAuthApp.init();
-            KeyAuthApp.login(_usernameL.Text, _passwordL.Text);
-
+            // Login (réseau) en arrière-plan.
+            Exception loginEx = null;
+            await Task.Run(() => { try { KeyAuthApp.login(_usernameL.Text, _passwordL.Text); } catch (Exception ex) { loginEx = ex; } });
+            if (loginEx != null)
+            {
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Login error: " + loginEx.Message, "Login", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
             if (KeyAuthApp.response.success)
             {
+                // "Remember me" : sauvegarde ou efface les identifiants localement.
+                if (_rememberCheck != null && _rememberCheck.Checked)
+                    RememberMe.Save(_usernameL.Text, _passwordL.Text);
+                else
+                    RememberMe.Clear();
 
-                _containerSignIn.Visible = false;
-                _containerNav.Visible = false;
-                //await Task.Delay(100);
-
-                _containerLoadingProduct.Visible = true;
-                //await Task.Delay(400);
+                // Le loader thread (dans InitializeTimerLoading) recouvre toute la transition.
                 InitializeTimerLoading();
                 CreateDirectories();
             }
             else
             {
-                MessageBox.Show("LOGIN FAILED");
+                string msg = KeyAuthApp.response.message ?? "";
+                string lower = msg.ToLowerInvariant();
 
-
+                // Message clair quand la licence est expirée / plus d'abonnement actif.
+                if (lower.Contains("expire") || lower.Contains("subscription") || lower.Contains(" sub") || lower.Contains("no active"))
+                {
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                        "Your license has expired or is no longer active.\n\nRenew it — or claim a new key with \"Add license\" — to keep using PaiPai.",
+                        "License expired", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                else
+                {
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                        string.IsNullOrEmpty(msg) ? "Login failed." : msg,
+                        "Login failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
         private async void CheckRegister()
         {
+            if (string.IsNullOrWhiteSpace(_usernameR.Text) ||
+                string.IsNullOrWhiteSpace(_passwordR.Text) ||
+                string.IsNullOrWhiteSpace(_licenseR.Text))
+            {
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Please fill in username, password and license.", "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             await Task.Delay(300);
 
-            KeyAuthApp.init();
-            KeyAuthApp.register(_usernameR.Text, _passwordR.Text, _licenseR.Text);
+            if (!EnsureKeyAuthInitialized())
+                return;
 
+            try
+            {
+                KeyAuthApp.register(_usernameR.Text, _passwordR.Text, _licenseR.Text);
+            }
+            catch (Exception ex)
+            {
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Registration error: " + ex.Message, "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
             if (KeyAuthApp.response.success)
             {
-                MessageBox.Show("User created successfully...");
-
-
-
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("User created successfully. You can now log in.", "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
-                MessageBox.Show("Registration failed, please try again.");
-
-
+                // Show the real reason returned by KeyAuth (e.g. "invalid license",
+                // "license used", "username taken", "keylevel doesn't match"...)
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                    string.IsNullOrEmpty(KeyAuthApp.response.message) ? "Registration failed, please try again." : KeyAuthApp.response.message,
+                    "Registration failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-
         }
 
 
@@ -700,7 +1044,7 @@ namespace PlantillaChanchoV16
             {
                 HandleTabButtonClick(_btnLogOut);
 
-                var result = MessageBox.Show(
+                var result = PlantillaChanchoV16.Template.SakuraMessageBox.Show(
                    "Are you sure you want to leave?",
                    "Confirmation",
                    MessageBoxButtons.YesNo,
@@ -992,7 +1336,7 @@ namespace PlantillaChanchoV16
                 "YouTube",
                 _images.DcIcon,
                 _images.YtIcon,
-                () => { _utils.OpenLink("https://discord.gg/eternalproject"); },
+                () => { _utils.OpenLink("https://discord.gg/paipai"); },
                 () => { _utils.OpenLink("https://www.youtube.com/@AkchamScript"); }         
             );
 
@@ -1075,7 +1419,7 @@ namespace PlantillaChanchoV16
                 "YouTube",
                 _images.DcIcon,
                 _images.YtIcon,
-                () => { _utils.OpenLink("https://discord.gg/eternalproject"); },
+                () => { _utils.OpenLink("https://discord.gg/paipai"); },
                 () => { _utils.OpenLink("https://www.youtube.com/@AkchamScript"); }
             );
 
@@ -1155,12 +1499,15 @@ namespace PlantillaChanchoV16
                 Text = tx,
                 Animated = true,
                 BorderColor = Colors.scColor,
-                BorderRadius = 6,
+                BorderThickness = 1,
+                BorderRadius = 8,
                 FillColor = Colors.scColor,
-                FocusedState = { BorderColor = Color.Transparent },
+                // Contour rose sakura quand le champ est actif (focus) / survolé -> retour
+                // visuel premium au lieu d'un champ inerte.
+                FocusedState = { BorderColor = Colors.mainColor, FillColor = Colors.scColor },
                 Font = new Font("Inter Medium", 10F),
                 ForeColor = Color.White,
-                HoverState = { BorderColor = Color.Transparent },
+                HoverState = { BorderColor = Color.FromArgb(90, Colors.mainColor) },
                 PasswordChar = '\0',
                 PlaceholderText = placeholderText,
                 Size = new Size(parent.Width, 45),

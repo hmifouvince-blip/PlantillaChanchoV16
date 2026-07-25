@@ -16,9 +16,9 @@ namespace PlantillaChanchoV16.Utilities
 
         public static string oficialDeveloperName = "AKDASOY";
 
-        public static string companyName1 = "Eternal";
+        public static string companyName1 = "Pai";
 
-        public static string companyName2 = "Project";
+        public static string companyName2 = "Pai";
 
         public static int widthProduct = 229;
 

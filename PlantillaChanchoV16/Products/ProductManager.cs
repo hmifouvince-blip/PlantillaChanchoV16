@@ -46,15 +46,15 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Warzone,
                         requirements: GetRequirementsWarzone(),
                         features: GetFeaturesWarzone(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "warzone")
                         );
                 case "anydesk":
                     return new DetailsProduct(
-                        __subscriptionName: "forAnydesk",
+                        __subscriptionName: "Spoofer",
                         logoRounded: false,
                         productName: "Spoofer",
-                        productDescription: "- Supports All Windows 10 & Windows 11 \r\n- Supports All Intel/AMD Processors\r\n- Supports EAC/BE/Ricochet/Vanguard\r\n- Fixes \"HWID Identifiers\" Tournament Kick\r\n- Support all motherboard & laptop.\r\n- Ready TPM Bypass Valorant.",
+                        productDescription: "The most reliable HWID spoofer to bypass hardware bans and stay undetected.\r\n\r\n• Windows 10 & 11 support\r\n• All Intel / AMD processors\r\n• Bypasses EAC, BattlEye, Ricochet & Vanguard\r\n• Spoofs SSD/NVMe, CPU, GPU, motherboard, TPM & MAC\r\n• TPM bypass ready for Valorant\r\n• One-click, fully automatic",
                         __versionProduct: "26.78.1",
                         __lastUpdate: "16.12.2024",
                         productVideoURL: "https://youtu.be/VGuh4DfpaFY",
@@ -66,7 +66,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img4Anydesk,
                         requirements: GetRequirementsAnydesk(),
                         features: GetFeaturesAnydesk(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "anydesk")
                         );
                 case "csgo":
@@ -86,7 +86,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Csgo,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "CS:GO")
                     );
                 case "gta5":
@@ -106,7 +106,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Gta5,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "GTA 5")
                     );
                 case "minecraft":
@@ -126,7 +126,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Minecraft,
                          requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "minecraft")
                         );
                 case "rd2":
@@ -146,14 +146,14 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Rd2,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "rd2")
                         );
                 case "roblox":
                     return new DetailsProduct(
-                        __subscriptionName: "1BASIC",
+                        __subscriptionName: "Roblox",
                         productName: "Roblox Co:\nRoblox",
-                        productDescription: "Maximize your creativity in Roblox with advanced scripting tools, visual enhancements, and custom exploitations for diverse experiences.",
+                        productDescription: "A powerful Roblox toolkit for creators and explorers. Run advanced scripts, unlock visual enhancements and enjoy a smooth, stable and undetected experience across all your favorite games.",
                         __versionProduct: "1.8.2",
                         __lastUpdate: "20.12.2024",
                         productVideoURL: "https://www.youtube.com/watch?v=_gZCUxRKqsM",
@@ -166,15 +166,15 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Roblox,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "roblox")
                     );
                 case "valorant":
                     return new DetailsProduct(
-                        __subscriptionName: "Eternal",
+                        __subscriptionName: "Valorant",
                         logoRounded: true,
                         productName: "Riot Games:\nValorant",
-                        productDescription: "Conquer Valorant with precise aim, faster reflexes, and advanced features to dominate every match.",
+                        productDescription: "Take full control of every round. Precise aim assistance, lightning reflexes and smart visual tools — all in a clean, undetected package built to help you climb the ranks.",
                         __versionProduct: "1.8.2",
                         __lastUpdate: "20.12.2024",
                         productVideoURL: "https://images.savi.wtf/u/4Gn5w5.mp4",
@@ -186,7 +186,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Valorant,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "valorant")
                     );
                 case "freefire":
@@ -206,7 +206,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5FreeFire,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "freefire")
                         );
                 case "dota2":
@@ -226,7 +226,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Dota2,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "dota2")
                         );
                 case "tf2":
@@ -246,7 +246,7 @@ namespace PlantillaChanchoV16.Products
                         video1: images.Img5Tf2,
                         requirements: GetRequirements(),
                         features: GetFeatures(),
-                        linkDiscord: "https://discord.gg/eternalproject",
+                        linkDiscord: "https://discord.gg/paipai",
                         openProduct: () => LoadGame(form, "tf2")
                         );
                 default:
@@ -379,31 +379,71 @@ namespace PlantillaChanchoV16.Products
                 form.Hide();
             });
 
+            // ============================================================================
+            //  LIENS DE TELECHARGEMENT DES PRODUITS  (gérés sur le dashboard KeyAuth)
+            // ----------------------------------------------------------------------------
+            //  Chaque produit télécharge un .zip (protégé par le mot de passe "1") depuis
+            //  une URL directe (ex: lien Dropbox terminant par ?dl=1), l'extrait, puis lance
+            //  l'exe listé dans "exeFileNames".
+            //
+            //  Le lien N'EST PAS écrit ici : il est lu à l'exécution depuis une VARIABLE
+            //  KeyAuth via  Login.KeyAuthApp.var("nom_de_la_variable").
+            //
+            //  POUR CHANGER UN LIEN (le faire toi-même, sans recompiler) :
+            //    1. Va sur https://keyauth.cc  ->  ton application
+            //    2. Onglet "App Settings"  ->  section "Variables" (Global Variables)
+            //    3. Trouve la variable au nom indiqué ci-dessous, ou clique "Create New"
+            //    4. Colle ton nouveau lien Dropbox direct dans le champ "Value" et sauvegarde
+            //       (pour "supprimer l'ancien lien" : écrase simplement l'ancienne valeur,
+            //        ou supprime la variable puis recrée-la)
+            //
+            //  Correspondance VARIABLE KeyAuth  ->  PRODUIT  (à créer sur le dashboard) :
+            //    "link_spoofer"   -> Spoofer   (le .zip doit contenir Spoofer.exe)
+            //    "link_valorant"  -> Valorant  (le .zip doit contenir Valorant.exe ou .bat)
+            //    "link_roblox"    -> Roblox    (le .zip doit contenir Roblox.exe ou .bat)
+            //
+            //  Le nom du .zip lui-même n'a pas d'importance : seul compte le nom de
+            //  l'exécutable À L'INTÉRIEUR du zip (voir "exeFileNames" ci-dessous).
+            //  Le zip doit être protégé par le mot de passe : 1
+            // ============================================================================
             switch (gameName.ToLower())
             {
-                case "anydesk":
+                case "anydesk": // carte "Spoofer"
                     loadingProduct = new LoadingProduct(form,
                         logoProduct: images.LogoWoofer,
                         logoSize: new Size(50, 50),
                         bgImage: images.Img4Anydesk,
-                        productName: "Eternal Woofer",
-                        productDescription: "This software avoids game bans by virtualizing hardware identifiers, making your old hardware untraceable. It secures SSD/NVME, CPU, GPU, motherboard, TPM, and MAC addresses for uninterrupted gaming",
-                        downloadURL: $"{Login.KeyAuthApp.var("woofer")}", // DOWNLOAD LINK CODE
-                        zipFileName: "HSP.zip",
-                        exeFileNames: new List<string> {"HSP.exe","Woofer.exe" } // test
+                        productName: "Spoofer",
+                        productDescription: "Permanently changes your hardware identifiers to bypass hardware bans and keep your machine untraceable. Secures SSD/NVMe, CPU, GPU, motherboard, TPM and MAC — for safe, uninterrupted gaming.",
+                        downloadURL: $"{Login.KeyAuthApp.var("link_spoofer")}", // <== LIEN SPOOFER (variable KeyAuth "link_spoofer")
+                        zipFileName: "Spoofer.zip",
+                        exeFileNames: new List<string> { "Spoofer.exe", "HSP.exe", "Woofer.exe" } // lance le 1er trouvé
                     );
                     break;
 
-                case "valorant":
+                case "valorant": // carte "Valorant"
                     loadingProduct = new LoadingProduct(form,
-                        logoProduct: images.LogoMinecraft,
+                        logoProduct: images.LogoValorant,
                         logoSize: new Size(50, 50),
-                        bgImage: images.BgMinecraft,
-                        productName: "Eternal Valorant",
-                        productDescription: "Unleash creativity and adventure in Minecraft with innovative tools, visual enhancements, and custom features for all your building and survival needs.",
-                        downloadURL: $"{Login.KeyAuthApp.var("Eternal")}", // DOWNLOAD LINK CODE
-                        zipFileName: "Eternal.zip",
-                        exeFileNames: new List<string> { "Eternal.bat" }
+                        bgImage: images.BgValorant,
+                        productName: "Valorant",
+                        productDescription: "Take full control of every round. Precise aim assistance, lightning reflexes and smart visual tools — all in a clean, undetected package built to help you climb the ranks.",
+                        downloadURL: $"{Login.KeyAuthApp.var("link_valorant")}", // <== LIEN VALORANT (variable KeyAuth "link_valorant")
+                        zipFileName: "Valorant.zip",
+                        exeFileNames: new List<string> { "Valorant.exe", "Valorant.bat", "Eternal.exe", "Eternal.bat" } // lance le 1er trouvé
+                    );
+                    break;
+
+                case "roblox": // carte "Roblox"
+                    loadingProduct = new LoadingProduct(form,
+                        logoProduct: images.LogoRoblox,
+                        logoSize: new Size(50, 50),
+                        bgImage: images.BgRoblox,
+                        productName: "Roblox",
+                        productDescription: "A powerful Roblox toolkit for creators and explorers. Run advanced scripts, unlock visual enhancements and enjoy a smooth, stable and undetected experience across all your favorite games.",
+                        downloadURL: $"{Login.KeyAuthApp.var("link_roblox")}", // <== LIEN ROBLOX (variable KeyAuth "link_roblox")
+                        zipFileName: "Roblox.zip",
+                        exeFileNames: new List<string> { "Roblox.exe", "Roblox.bat" } // lance le 1er trouvé
                     );
                     break;
 

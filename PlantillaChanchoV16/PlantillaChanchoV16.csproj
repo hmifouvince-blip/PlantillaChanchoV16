@@ -7,16 +7,33 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
 		
-		<PublishTrimmed>true</PublishTrimmed>
+		<!-- PAS de trimming global : cette appli s'appuie fortement sur la réflexion
+		     (WinForms, Guna2, Newtonsoft, ressources) que le trimming casserait au runtime.
+		     Le single-file l'a de toute façon toujours désactivé. -->
 		<Platforms>AnyCPU;x64</Platforms>
 		<PublishAot>false</PublishAot>
+
+		<!-- Exe unique (self-contained) :
+		     dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true
+		     Le .NET + les DLL sont regroupés dans un seul .exe. Le trimming est
+		     désactivé en single-file pour ne pas casser la réflexion (WinForms/Guna2). -->
+		<RuntimeIdentifier Condition="'$(PublishSingleFile)' == 'true' and '$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+		<SelfContained Condition="'$(PublishSingleFile)' == 'true'">true</SelfContained>
+		<PublishTrimmed Condition="'$(PublishSingleFile)' == 'true'">false</PublishTrimmed>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 		<_suppressWinFormsTrimError>true</_suppressWinFormsTrimError>
 		<CustomResourceTypesSupport>true</CustomResourceTypesSupport>
 		<PlatformTarget>x64</PlatformTarget>
 		<ApplicationIcon>testLogo.ico</ApplicationIcon>
-		<Description>Eternal Project</Description>
-		<Title>Eternal Tool</Title>
+		<Description>PaiPai</Description>
+		<Title>PaiPai</Title>
 		<OutputType>WinExe</OutputType>
+
+		<!-- GC "workstation" non-concurrent : empreinte mémoire plus faible. -->
+		<ServerGarbageCollection>false</ServerGarbageCollection>
+		<ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
 		<PackageIcon>standard_2.png</PackageIcon>
 		<FileVersion>1.3.2.4</FileVersion>
 		<Copyright></Copyright>
@@ -24,6 +41,11 @@
 		<RootNamespace>$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
 		<AssemblyName>$(MSBuildProjectName)</AssemblyName>
 		<ApplicationManifest></ApplicationManifest>
+
+		<!-- Masque les avertissements inoffensifs et bruyants (nullable, obsolète, champs
+		     inutilisés, etc.) pour garder une liste d'erreurs propre. Ce ne sont QUE des
+		     avertissements, ils n'empêchent jamais la compilation. -->
+		<NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8622;CS8625;CS8765;CS8767;CS8981;CS0168;CS0169;CS0414;CS0649;CS4014;SYSLIB0014;NETSDK1138</NoWarn>
 	</PropertyGroup>
 
 
@@ -50,7 +72,6 @@
     <None Remove="AllFonts\Inter-ThinItalic.ttf" />
     <None Remove="Icons\arrow-right_icon-icons.com_72375.png" />
     <None Remove="Icons\arrow.png" />
-    <None Remove="Icons\arrowBack.png" />
     <None Remove="Icons\arrowRight.png" />
     <None Remove="Icons\arrowRight3.png" />
     <None Remove="Icons\checkIcon.png" />
@@ -112,7 +133,6 @@
     <None Remove="Images\img1_tf2.jpg" />
     <None Remove="Images\img1_valorant.jpg" />
     <None Remove="Images\img1_warzone.jpg" />
-    <None Remove="Images\img2-test.jpg" />
     <None Remove="Images\img2_csgo.jpg" />
     <None Remove="Images\img2_dota2.jpg" />
     <None Remove="Images\img2_freefire.jpg" />
@@ -123,7 +143,6 @@
     <None Remove="Images\img2_tf2.jpg" />
     <None Remove="Images\img2_valorant.jpg" />
     <None Remove="Images\img2_warzone.jpg" />
-    <None Remove="Images\img3-test.jpg" />
     <None Remove="Images\img3_csgo.jpg" />
     <None Remove="Images\img3_dota2.jpg" />
     <None Remove="Images\img3_freefire.jpg" />
@@ -134,7 +153,6 @@
     <None Remove="Images\img3_tf2.jpg" />
     <None Remove="Images\img3_valorant.jpg" />
     <None Remove="Images\img3_warzone.jpg" />
-    <None Remove="Images\img4-test.jpg" />
     <None Remove="Images\img4_csgo.png" />
     <None Remove="Images\img4_dota2.png" />
     <None Remove="Images\img4_freefire.png" />
@@ -213,7 +231,6 @@
     <EmbeddedResource Include="AllFonts\Inter-Thin.ttf" />
     <EmbeddedResource Include="AllFonts\Inter-ThinItalic.ttf" />
     <EmbeddedResource Include="Icons\arrow.png" />
-    <EmbeddedResource Include="Icons\arrowBack.png" />
     <EmbeddedResource Include="Icons\arrowRight.png" />
     <EmbeddedResource Include="Icons\checkIcon.png" />
     <EmbeddedResource Include="Icons\closeIcon.png" />
@@ -259,7 +276,6 @@
     <EmbeddedResource Include="Images\gridAllGames.png" />
     <EmbeddedResource Include="Images\homeImage2.jpg" />
     <EmbeddedResource Include="Images\homeImage3.jpg" />
-    <EmbeddedResource Include="Images\img1-test.jpg" />
     <EmbeddedResource Include="Images\img1_csgo.jpg" />
     <EmbeddedResource Include="Images\img1_dota2.jpg" />
     <EmbeddedResource Include="Images\img1_freefire.jpg" />
@@ -270,7 +286,6 @@
     <EmbeddedResource Include="Images\img1_tf2.jpg" />
     <EmbeddedResource Include="Images\img1_valorant.jpg" />
     <EmbeddedResource Include="Images\img1_warzone.jpg" />
-    <EmbeddedResource Include="Images\img2-test.jpg" />
     <EmbeddedResource Include="Images\img2_csgo.jpg" />
     <EmbeddedResource Include="Images\img2_dota2.jpg" />
     <EmbeddedResource Include="Images\img2_freefire.jpg" />
@@ -281,7 +296,6 @@
     <EmbeddedResource Include="Images\img2_tf2.jpg" />
     <EmbeddedResource Include="Images\img2_valorant.jpg" />
     <EmbeddedResource Include="Images\img2_warzone.jpg" />
-    <EmbeddedResource Include="Images\img3-test.jpg" />
     <EmbeddedResource Include="Images\img3_csgo.jpg" />
     <EmbeddedResource Include="Images\img3_dota2.jpg" />
     <EmbeddedResource Include="Images\img3_freefire.jpg" />
@@ -292,7 +306,6 @@
     <EmbeddedResource Include="Images\img3_tf2.jpg" />
     <EmbeddedResource Include="Images\img3_valorant.jpg" />
     <EmbeddedResource Include="Images\img3_warzone.jpg" />
-    <EmbeddedResource Include="Images\img4-test.jpg" />
     <EmbeddedResource Include="Images\img5_warzone.png" />
     <EmbeddedResource Include="Images\img4_csgo.png" />
     <EmbeddedResource Include="Images\img4_dota2.png" />
@@ -344,11 +357,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- DiscordRPC.dll est dans le dossier du projet (portable). Les anciens HintPath
+         pointaient hors du dépôt (introuvables sur une autre machine) -> build cassé
+         lors d'une distribution / build propre. -->
     <Reference Include="DiscordRPC">
-      <HintPath>..\..\PlantillaChanchoV9 - Desktop\PlantillaChanchoV9\Resources\DiscordRPC.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscordRPC">
-      <HintPath>..\..\..\Downloads\DiscordRPC (1).dll</HintPath>
+      <HintPath>DiscordRPC.dll</HintPath>
     </Reference>
   </ItemGroup>
 
