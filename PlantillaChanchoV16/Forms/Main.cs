@@ -516,6 +516,10 @@ namespace PlantillaChanchoV16
                 BorderRadius = 13,
                 Cursor = Cursors.Hand,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                // Sans ça, les 4 coins du rectangle englobant (hors de l'arrondi) s'affichent
+                // dans une couleur plate au lieu de laisser voir le degrade de la nav bar
+                // derriere -> petits carres qui depassent de la pastille arrondie.
+                UseTransparentBackground = true,
             };
             chip.Location = new Point(windowButtonsHost.Left - chip.Width - 10, windowButtonsHost.Top + 1);
 
@@ -526,6 +530,7 @@ namespace PlantillaChanchoV16
                 BorderRadius = 4,
                 FillColor = Color.FromArgb(140, 255, 255, 255),
                 Location = new Point(12, (chip.Height - 8) / 2),
+                UseTransparentBackground = true,
             };
 
             _vpnChipLabel = new Guna2HtmlLabel
@@ -1972,8 +1977,9 @@ namespace PlantillaChanchoV16
                 Animated = true,
                 Cursor = Cursors.Hand,
                 UseTransparentBackground = true,
-                // À gauche, juste après le titre (évite les boutons fenêtre en haut à droite).
-                Location = new Point(185, 14)
+                // Positionné juste après le titre : en FR/ES le texte est plus long qu'en EN,
+                // une position X fixe fait chevaucher le bouton sur le titre traduit.
+                Location = new Point(_titleViewUserAccount.Right + 20, 14)
             };
             btnRefresh.HoverState.FillColor = System.Windows.Forms.ControlPaint.Light(Colors.mainColor, 0.2f);
             btnRefresh.PressedColor = System.Windows.Forms.ControlPaint.Dark(Colors.mainColor, 0.04f);
