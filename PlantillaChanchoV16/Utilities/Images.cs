@@ -17,7 +17,10 @@ namespace PlantillaChanchoV16.Utilities
         // MAIN LOGO
 
         private Image _mainLogo;
-        public Image MainLogo => _mainLogo ??= utilities.LoadEmbeddedImage($"{namespaceDefault}.Images.logoEternal.jpg");
+        // Logo officiel PaiPai (fourni par l'utilisateur) : remplace l'ancien placeholder
+        // logoEternal.jpg. Une seule source ici -> se propage automatiquement partout où
+        // MainLogo est déjà utilisé (nav SpinningLogo, Login, écran de lancement ConfigLogo).
+        public Image MainLogo => _mainLogo ??= utilities.LoadEmbeddedImage($"{namespaceDefault}.Images.Logo.png");
 
         private Image _homeImage;
         public Image HomeImage => _homeImage ??= utilities.LoadEmbeddedImage($"{namespaceDefault}.Images.homeImage3.jpg");

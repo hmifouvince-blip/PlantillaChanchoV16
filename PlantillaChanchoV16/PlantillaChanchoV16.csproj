@@ -174,6 +174,7 @@
     <None Remove="Images\img5_valorant.png" />
     <None Remove="Images\img5_warzone.png" />
     <None Remove="Images\imgUser.jpg" />
+    <None Remove="Images\Logo.png" />
     <None Remove="Images\logoEternal.jpg" />
     <None Remove="Images\logo_csgo.png" />
     <None Remove="Images\logo_dota2.png" />
@@ -327,6 +328,7 @@
     <EmbeddedResource Include="Images\img5_tf2.png" />
     <EmbeddedResource Include="Images\img5_valorant.png" />
     <EmbeddedResource Include="Images\imgUser.jpg" />
+    <EmbeddedResource Include="Images\Logo.png" />
     <EmbeddedResource Include="Images\logoEternal.jpg" />
     <EmbeddedResource Include="Images\logo_csgo.png" />
     <EmbeddedResource Include="Images\logo_dota2.png" />
