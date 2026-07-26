@@ -191,9 +191,12 @@ function start(client) {
 
   captureConsole();
 
-  // PORT est impose par la plupart des hebergeurs ; CONTROL_PORT sert au test
-  // en local ou l'on veut choisir soi-meme.
-  const port = Number(process.env.PORT || process.env.CONTROL_PORT || 8080);
+  // Chaque hebergeur impose sa propre variable : PORT chez la plupart des PaaS,
+  // SERVER_PORT sur les panels Pterodactyl (Wispbyte, bot-hosting...).
+  // CONTROL_PORT ne sert qu'en local, ou l'on choisit soi-meme.
+  const port = Number(
+    process.env.PORT || process.env.SERVER_PORT || process.env.CONTROL_PORT || 8080
+  );
 
   const server = http.createServer((req, res) => {
     handle(req, res, client).catch((err) => {
