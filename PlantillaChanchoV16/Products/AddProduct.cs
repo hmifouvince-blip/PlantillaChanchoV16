@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -289,14 +289,22 @@ public class AddProduct
     {
         return new[]
         {
-            new ProductView(productActive: true, productUnderMaintenance: false, "Spoofer", "12.01.2025", images.LogoWoofer, images.Img2Anydesk, () => openGameDetails("anydesk")),
+            // Bannieres : ProductArt genere un visuel DEDIE pour les produits sans
+            // affiche officielle. Avant, Spoofer et Windows PaiPai partageaient la
+            // capture generique Img2Anydesk (l'ecran "ASUS / OTHERS"), et Windows
+            // PaiPai s'en servait meme comme vignette -> illisible une fois reduite.
+            new ProductView(productActive: true, productUnderMaintenance: false, "Spoofer", "12.01.2025", images.LogoWoofer, ProductArt.Spoofer, () => openGameDetails("anydesk")),
             //new ProductView(productActive: true, productUnderMaintenance: false, "CS:GO 2", "12.01.2025", images.LogoCsgo, images.BgCsgo, () => openGameDetails("csgo")), // CODE FOR REMOTE UPDATE DATE --> $"{Login.KeyAuthApp.var("variable_name")}"
             //new ProductView(productActive: true, productUnderMaintenance: false, "GTA V", "12.01.2025", images.LogoGta5, images.BgGta5, () => openGameDetails("gta5")),
             //new ProductView(productActive: true, productUnderMaintenance: false, "MINECRAFT", "12.01.2025", images.LogoMinecraft, images.BgMinecraft, () => openGameDetails("minecraft")),
             new ProductView(productActive: true, productUnderMaintenance: false, "ROBLOX", "12.01.2025", images.LogoRoblox, images.BgRoblox, () => openGameDetails("roblox")),
             //new ProductView(productActive: true, productUnderMaintenance: false, "RED DEAD REDEMPTION 2", "12.01.2025", images.LogoRd2, images.BgRd2, () => openGameDetails("rd2")),
             new ProductView(productActive: true, productUnderMaintenance: false, "VALORANT", "12.01.2025", images.LogoValorant, images.BgValorant, () => openGameDetails("valorant")),
-            new ProductView(productActive: true, productUnderMaintenance: false, "Windows PaiPai", "12.01.2025", images.Img2Anydesk, images.Img2Anydesk, () => openGameDetails("windowspai")),
+            new ProductView(productActive: true, productUnderMaintenance: false, "Windows PaiPai", "12.01.2025", ProductArt.WindowsPaiIcon, ProductArt.WindowsPai, () => openGameDetails("windowspai")),
+            // Bot Manager manquait completement de la grille alors qu'il figure dans
+            // ProductCatalog (et donc dans les licences) -> l'onglet Products
+            // annoncait "4 PRODUCTS" pour un catalogue de 5.
+            new ProductView(productActive: true, productUnderMaintenance: false, "Bot Manager", "12.01.2025", ProductArt.BotManagerIcon, ProductArt.BotManager, () => openGameDetails("botmanager")),
             //new ProductView(productActive: true, productUnderMaintenance: false, "FREE FIRE", "12.01.2025", images.LogoFreefire, images.BgFreefire, () => openGameDetails("freefire")),
             //new ProductView(productActive: false, productUnderMaintenance: false, "PUBG", "12.01.2025", images.LogoPubg, images.BgPubg, () => openGameDetails("pubg")),
             //new ProductView(productActive: true, productUnderMaintenance: false, "FORTNITE", "12.01.2025", images.LogoFortnite, images.BgFortnite, () => openGameDetails("fortnite")),

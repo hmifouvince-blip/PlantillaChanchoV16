@@ -38,11 +38,59 @@ namespace PlantillaChanchoV16.Template
         public static Image WindowsPai => Get("windowspai", "WINDOWS", Glyph.Window, Color.FromArgb(96, 214, 190));
         public static Image BotManager => Get("botmanager", "BOT MANAGER", Glyph.Bot, Color.FromArgb(186, 140, 255));
 
+        // Pastilles carrees assorties aux affiches : la grille de l'onglet
+        // Products affiche une petite vignette a cote du nom, en plus de la
+        // banniere. Sans elle, un produit sans logo dedie retombait sur la
+        // banniere elle-meme, illisible une fois reduite a 32 px.
+        public static Image SpooferIcon => GetIcon("spoofer", Glyph.Shield, Color.FromArgb(244, 114, 182));
+        public static Image WindowsPaiIcon => GetIcon("windowspai", Glyph.Window, Color.FromArgb(96, 214, 190));
+        public static Image BotManagerIcon => GetIcon("botmanager", Glyph.Bot, Color.FromArgb(186, 140, 255));
+
         private static Image Get(string key, string caption, Glyph glyph, Color accent)
         {
             if (Cache.TryGetValue(key, out var cached)) return cached;
             var bmp = Render(caption, glyph, accent);
             Cache[key] = bmp;
+            return bmp;
+        }
+
+        private static Image GetIcon(string key, Glyph glyph, Color accent)
+        {
+            string cacheKey = key + ":icon";
+            if (Cache.TryGetValue(cacheKey, out var cached)) return cached;
+            var bmp = RenderIcon(glyph, accent);
+            Cache[cacheKey] = bmp;
+            return bmp;
+        }
+
+        private static Image RenderIcon(Glyph glyph, Color accent)
+        {
+            const int S = 192;
+            var bmp = new Bitmap(S, S);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                var box = new RectangleF(0, 0, S, S);
+
+                using (var path = RoundedF(box, S * 0.24f))
+                {
+                    using (var bg = new LinearGradientBrush(box,
+                               Blend(Colors.bgColor, accent, 0.45f),
+                               Blend(Colors.bgColor, accent, 0.12f),
+                               LinearGradientMode.ForwardDiagonal))
+                        g.FillPath(bg, path);
+
+                    // Le glyphe est dessine A TRAVERS le clip du badge : sans ca,
+                    // le halo deborderait des coins arrondis.
+                    var clip = g.Save();
+                    g.SetClip(path);
+                    DrawGlyph(g, glyph, new Rectangle((int)(S * 0.22f), (int)(S * 0.22f), (int)(S * 0.56f), (int)(S * 0.56f)), accent);
+                    g.Restore(clip);
+
+                    using (var pen = new Pen(Color.FromArgb(90, accent), 3f))
+                        g.DrawPath(pen, path);
+                }
+            }
             return bmp;
         }
 
