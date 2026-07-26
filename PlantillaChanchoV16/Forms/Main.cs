@@ -508,8 +508,79 @@ namespace PlantillaChanchoV16
         }
 
         private Guna2Panel _vpnDot;
+        private Guna2Panel _vpnChip;
         private Guna2HtmlLabel _vpnChipLabel;
         private Timer _vpnPollTimer;
+        private bool _vpnBusy;
+
+        // La licence peut être réclamée pendant la session (onglet "Claim Key") :
+        // la pastille doit donc pouvoir apparaître sans redémarrer l'application.
+        internal void RefreshVpnChipVisibility()
+        {
+            if (_vpnChip == null || _vpnChip.IsDisposed) return;
+            _vpnChip.Visible = Utilities.LicenseGate.HasValidSubscription("WindowsPai");
+        }
+
+        // Bascule le tunnel WARP. Tout le travail part sur un thread de fond : les
+        // commandes warp-cli prennent 1 à 3 s, les exécuter sur le thread UI figerait
+        // toute la fenêtre.
+        private void ToggleVpn()
+        {
+            if (_vpnBusy) return;
+            if (!Utilities.LicenseGate.HasValidSubscription("WindowsPai")) { RefreshVpnChipVisibility(); return; }
+
+            _vpnBusy = true;
+            SetVpnChipText(Localization.T("main.vpn_label") + " …");
+
+            Task.Run(() =>
+            {
+                string error = null;
+                try
+                {
+                    // Même message et même repli que WindowsPaiScreen : si
+                    // l'installation silencieuse échoue, on ouvre la page officielle
+                    // plutôt que de laisser l'utilisateur sans issue.
+                    if (!Utilities.WarpVpn.IsInstalled() && !Utilities.WarpVpn.Install())
+                    {
+                        error = "Could not install Cloudflare WARP automatically.\nInstall it from "
+                              + Utilities.WarpVpn.OfficialUrl;
+                        try
+                        {
+                            System.Diagnostics.Process.Start(
+                                new System.Diagnostics.ProcessStartInfo(Utilities.WarpVpn.OfficialUrl) { UseShellExecute = true });
+                        }
+                        catch { }
+                    }
+                    else if (Utilities.WarpVpn.IsConnected()) Utilities.WarpVpn.Disconnect();
+                    else Utilities.WarpVpn.Connect();
+                }
+                catch (Exception ex) { error = ex.Message; }
+
+                try
+                {
+                    if (!IsHandleCreated || IsDisposed) return;
+                    BeginInvoke(new Action(() =>
+                    {
+                        _vpnBusy = false;
+                        SetVpnChipText(Localization.T("main.vpn_label"));
+                        if (error != null)
+                        {
+                            Template.SakuraMessageBox.Show(error, Localization.T("main.vpn_label"),
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                        PollVpnStatus();
+                    }));
+                }
+                catch { _vpnBusy = false; }
+            });
+        }
+
+        private void SetVpnChipText(string text)
+        {
+            if (_vpnChipLabel == null || _vpnChipLabel.IsDisposed) return;
+            _vpnChipLabel.Text = text;
+            if (_vpnChip != null) _vpnChipLabel.Location = new Point(26, (_vpnChip.Height - _vpnChipLabel.Height) / 2);
+        }
 
         // Pastille de statut VPN dans le chrome de la fenêtre (façon "dashboard" pro) :
         // point vert/gris + "VPN", cliquable pour ouvrir Windows PaiPai (même verrou de
@@ -555,16 +626,17 @@ namespace PlantillaChanchoV16
             };
             _vpnChipLabel.Location = new Point(26, (chip.Height - _vpnChipLabel.Height) / 2);
 
-            void OpenVpn()
-            {
-                if (!RequireLicense("windowspai")) return;
-                using (var scr = new Template.WindowsPaiScreen())
-                    scr.ShowDialog(this);
-                PollVpnStatus();
-            }
-            chip.Click += (s, e) => OpenVpn();
-            _vpnDot.Click += (s, e) => OpenVpn();
-            _vpnChipLabel.Click += (s, e) => OpenVpn();
+            // La pastille n'existe QUE pour qui possède Windows PaiPai : c'est ce
+            // produit qui fournit le VPN. L'afficher aux autres revenait à proposer
+            // un bouton qui ne pouvait que refuser — mieux vaut ne rien montrer.
+            _vpnChip = chip;
+            RefreshVpnChipVisibility();
+
+            // Un clic BASCULE le tunnel directement, au lieu d'ouvrir l'écran
+            // Windows PaiPai pour y cliquer une seconde fois.
+            chip.Click += (s, e) => ToggleVpn();
+            _vpnDot.Click += (s, e) => ToggleVpn();
+            _vpnChipLabel.Click += (s, e) => ToggleVpn();
 
             chip.BringToFront();
 
@@ -1767,6 +1839,10 @@ namespace PlantillaChanchoV16
             CreateLicensesSection();
             LayoutUserAccountHeight();
             RefreshUserScrollExtent();
+
+            // La pastille VPN n'est visible qu'avec Windows PaiPai : si la licence
+            // vient d'être réclamée, elle doit apparaître tout de suite.
+            RefreshVpnChipVisibility();
         }
 
         // Active/étend le défilement de la page compte selon la hauteur RÉELLE du contenu
