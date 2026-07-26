@@ -946,6 +946,7 @@ namespace PlantillaChanchoV16
                 containerTab2.Visible = false;
                 containerTab3.Visible = false;
                 containerTab1.Visible = true;
+                _activeTab = containerTab1;
                 RelayoutRightArea();
             });
             btnRequirements = CreateButtonsTab(1, new Point(0, 2), "Requirements", () =>
@@ -953,6 +954,7 @@ namespace PlantillaChanchoV16
                 containerTab1.Visible = false;
                 containerTab3.Visible = false;
                 containerTab2.Visible = true;
+                _activeTab = containerTab2;
                 RelayoutRightArea();
             });
             btnFeatures = CreateButtonsTab(2, new Point(0, 0), "Features", () =>
@@ -960,6 +962,7 @@ namespace PlantillaChanchoV16
                 containerTab1.Visible = false;
                 containerTab2.Visible = false;
                 containerTab3.Visible = true;
+                _activeTab = containerTab3;
                 RelayoutRightArea();
             });
             containerIndicatorPanel = new Guna2Panel
@@ -1311,18 +1314,72 @@ namespace PlantillaChanchoV16
         // seule fois à la construction serait fausse dès le premier changement
         // d'onglet. Sans ça, le bouton finissait sous la ligne de flottaison et le
         // produit devenait impossible à lancer.
+        // Hauteur RÉELLE du contenu d'un onglet, mesurée sur ses enfants.
+        //
+        // On ne peut PAS se fier à tab.Bottom : containerTab1 est en AutoSize et reste
+        // masqué jusqu'au premier PerformClick. Un panneau invisible ne déclenche pas
+        // de passe de layout, donc sa hauteur vaut encore sa valeur initiale (quasi
+        // nulle) au moment où on la lit -> le bloc LAUNCH se plaçait beaucoup trop
+        // haut et recouvrait la description. Les enfants, eux, ont toujours leur
+        // position finale puisqu'elle est calculée explicitement à la construction.
+        private static int TabContentHeight(Guna2Panel tab)
+        {
+            if (tab == null) return 0;
+            int bottom = 0;
+            // On mesure TOUS les enfants sans filtrer sur Visible : ce getter renvoie
+            // la visibilité EFFECTIVE (il remonte la chaîne des parents), donc tant
+            // que la fiche n'est pas affichée, chaque enfant se déclare invisible.
+            foreach (Control child in tab.Controls) bottom = Math.Max(bottom, child.Bottom);
+            return Math.Max(bottom, tab.Height);
+        }
+
+        // Onglet actif suivi À LA MAIN, pour la même raison : pendant la construction
+        // la fiche n'est pas encore affichée, donc containerTabX.Visible vaut false
+        // même juste après l'avoir mis à true. S'y fier faisait retomber le calcul
+        // sur la seule barre d'onglets -> LAUNCH collé sous les onglets, par-dessus
+        // la description.
+        private Guna2Panel _activeTab;
+
+        // Réempile l'onglet About à partir des tailles RÉELLEMENT mesurées.
+        //
+        // À la construction, chaque position était calculée en lisant le .Bottom du
+        // contrôle précédent AVANT qu'il soit rattaché à un parent : la description
+        // (AutoSizeHeightOnly, hauteur dépendant du retour à la ligne) n'avait donc
+        // pas encore sa hauteur définitive, et tout ce qui suivait héritait du
+        // décalage. D'où le texte qui chevauchait le séparateur et la version.
+        private void RestackAboutTab()
+        {
+            if (containerTab1 == null || descriptionProduct == null || separatorUpdates == null) return;
+
+            int w = containerTab1.Width;
+
+            descriptionProduct.Width = w;
+            descriptionProduct.Location = new Point(0, 0);
+
+            int y = descriptionProduct.Bottom + 34;
+            versionProduct.Location = new Point(0, y);
+            dateVersionProduct.Location = new Point(Math.Max(0, w - dateVersionProduct.Width - 4), y);
+
+            separatorUpdates.Width = w;
+            separatorUpdates.Location = new Point(0, Math.Max(versionProduct.Bottom, dateVersionProduct.Bottom) + 10);
+
+            int y2 = separatorUpdates.Bottom + 10;
+            lastUpdateProduct.Location = new Point(0, y2);
+            dateLastUpdateProduct.Location = new Point(Math.Max(0, w - dateLastUpdateProduct.Width - 4), y2);
+        }
+
         private void RelayoutRightArea()
         {
             if (containerRightArea == null || containerActivateProduct == null) return;
 
+            RestackAboutTab();
+
+            var tab = _activeTab ?? containerTab1;
             int contentBottom = containerTabBtnProduct?.Bottom ?? 0;
-            foreach (var tab in new[] { containerTab1, containerTab2, containerTab3 })
-            {
-                if (tab != null && tab.Visible) contentBottom = Math.Max(contentBottom, tab.Bottom);
-            }
+            if (tab != null) contentBottom = Math.Max(contentBottom, tab.Top + TabContentHeight(tab));
 
             containerActivateProduct.Width = containerRightArea.Width;
-            containerActivateProduct.Location = new Point(0, contentBottom + 24);
+            containerActivateProduct.Location = new Point(0, contentBottom + 28);
             containerActivateProduct.BringToFront();
 
             // La colonne de droite ne peut jamais être plus courte que la colonne
@@ -1332,10 +1389,14 @@ namespace PlantillaChanchoV16
             int mediaHeight = containerSmallImage?.Bottom ?? containerLeftArea?.Height ?? 0;
             containerRightArea.Height = Math.Max(mediaHeight, containerActivateProduct.Bottom + 16);
 
-            // Le conteneur parent doit suivre, sinon la zone agrandie reste hors
-            // du viewport défilable et on n'atteint toujours pas le bouton.
+            // TOUTE la chaîne de conteneurs doit suivre, pas seulement la fiche :
+            // containerHero est dimensionné une fois pour toutes sur la taille
+            // initiale du formulaire et sert de fond peint. S'il ne grandit pas, il
+            // rogne le bas du contenu — le bouton LAUNCH réapparaissait au bon
+            // endroit mais restait coupé par le bord du panneau.
             int needed = containerRightArea.Bottom + 24;
             if (containerMain != null && containerMain.Height < needed) containerMain.Height = needed;
+            if (containerHero != null && containerHero.Height < needed) containerHero.Height = needed;
             if (this.Height < needed) this.Height = needed;
         }
 
