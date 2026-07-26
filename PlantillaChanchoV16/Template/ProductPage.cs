@@ -9,26 +9,30 @@ using System.Windows.Forms;
 
 namespace PlantillaChanchoV16.Template
 {
-    // Fiche produit — reecriture complete de l'ancien DetailsProduct.
+    // Fiche produit — remplace l'ancien DetailsProduct.
     //
-    // POURQUOI une reecriture : l'ancien ecran calculait chaque position en
-    // lisant le .Bottom du controle precedent AU MOMENT de sa creation, avant
-    // meme qu'il soit rattache a un parent (donc avant qu'il connaisse sa vraie
-    // taille), melangeait des panneaux AutoSize et des hauteurs figees, et se
-    // fiait a Control.Visible — qui renvoie la visibilite EFFECTIVE et vaut donc
-    // false tant que la fenetre n'est pas affichee. Resultat : bouton LAUNCH
-    // par-dessus le texte, colonne rognee, largeurs mortes.
+    // Calquee sur WindowsPaiScreen, le seul ecran de l'app dont le rendu n'a
+    // jamais pose probleme, et pour trois raisons precises reprises telles quelles :
     //
-    // PRINCIPE ICI : les controles sont crees SANS position, puis UNE SEULE
-    // methode (Layout) les place, de haut en bas, a partir de la largeur
-    // disponible. Elle est rejouee a chaque changement d'onglet et de taille.
-    // Aucun AutoSize, aucune lecture de Visible, aucune position calculee a la
-    // construction -> le rendu ne depend plus de l'ordre du code.
+    // 1. LE FORMULAIRE PEINT SON PROPRE FOND (ControlStyles.UserPaint + OnPaint).
+    //    Les Label a BackColor=Transparent se composent alors correctement.
+    //    Poses sur un Guna2Panel "transparent", ils affichaient un rectangle de
+    //    fond parasite derriere chaque titre.
+    // 2. LES IMAGES PASSENT PAR Guna2PictureBox. Guna2Button se peint entierement
+    //    lui-meme et IGNORE BackgroundImage -> les captures restaient invisibles.
+    // 3. LA PAGE NE DEPASSE JAMAIS SON HOTE. Faire grandir le formulaire au-dela
+    //    du panneau qui le contient ne fait que decaler le rognage : ici tout est
+    //    calcule pour TENIR dans la place disponible, et le texte trop long
+    //    defile dans sa propre zone.
+    //
+    // Les controles sont crees SANS position ; une seule methode (Layout) les
+    // place a partir de la place disponible, rejouee a chaque onglet/redimension.
     public class ProductPage : Form
     {
-        private const int Pad = 26;      // marge exterieure
-        private const int Gap = 18;      // espace entre les deux colonnes
-        private const int ThumbGap = 10;
+        private const int Pad = 24;
+        private const int Gap = 16;
+        private const int ThumbGap = 8;
+        private const int CardPad = 18;
 
         private readonly string _name, _description, _version, _lastUpdate, _linkDiscord, _videoUrl;
         private readonly Image _logo;
@@ -42,28 +46,27 @@ namespace PlantillaChanchoV16.Template
         private readonly Utils _utils = new Utils();
         private readonly Images _images = new Images();
 
-        // --- controles ---
-        private Guna2Panel _root;
-        private Guna2Button _logoBox;
+        private Guna2PictureBox _logoBox, _preview;
+        private readonly List<Guna2PictureBox> _thumbs = new List<Guna2PictureBox>();
         private Label _title, _kicker;
-        private Guna2Button _preview;
-        private readonly List<Guna2Button> _thumbs = new List<Guna2Button>();
         private Guna2CircleButton _expandBtn;
-        private Guna2Panel _infoCard;
+
+        private Guna2Panel _card;
         private readonly Guna2Button[] _tabBtns = new Guna2Button[3];
-        private Guna2Panel _tabUnderline;
+        private Guna2Panel _underline;
+        private Panel _scrollArea;      // defile si le contenu depasse
         private Label _body;
         private Guna2Panel _listPanel;
-        private Label _versionKey, _versionVal, _updateKey, _updateVal;
         private Guna2Separator _metaLine;
+        private Label _versionKey, _versionVal, _updateKey, _updateVal;
         private Guna2Button _launch;
         private Guna2HtmlLabel _report;
 
         private Guna2Panel _overlay;
         private Guna2PictureBox _overlayImage;
+        private Guna2CircleButton _overlayClose;
 
-        private int _activeTab;          // 0 About, 1 Requirements, 2 Features
-        private int _activeShot;
+        private int _activeTab, _activeShot;
 
         public ProductPage(
             string __subscriptionName,
@@ -84,7 +87,10 @@ namespace PlantillaChanchoV16.Template
             string linkDiscord,
             Action openProduct)
         {
-            _name = productName ?? "";
+            // Le catalogue met des retours a la ligne dans les noms
+            // ("Rockstar: Grand\nTheft Auto V") -> on les aplatit, la mise en page
+            // gere elle-meme le repli.
+            _name = (productName ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
             _description = (productDescription ?? "").Replace("\r\n", "\n");
             _version = __versionProduct ?? "";
             _lastUpdate = __lastUpdate ?? "";
@@ -94,120 +100,109 @@ namespace PlantillaChanchoV16.Template
             _shots = new[] { image1, image2, image3, image4 }.Where(i => i != null).ToArray();
             _videoThumb = video1;
             _requirements = (requirements ?? new List<(string, Image, Color, string)>())
-                .Select(r => (r.requirementsText, r.icon, r.iconColor, r.link)).ToList();
+                .Select(r => (text: r.requirementsText, icon: r.icon, color: r.iconColor, link: r.link)).ToList();
             _features = (features ?? new List<(string, Image, Color)>())
-                .Select(f => (f.featureText, f.icon, f.iconColor)).ToList();
+                .Select(f => (text: f.featureText, icon: f.icon, color: f.iconColor)).ToList();
             _linkDiscord = linkDiscord;
             _openProduct = openProduct;
 
             FormBorderStyle = FormBorderStyle.None;
             BackColor = Colors.bgColor;
-            Size = new Size(900, 560);
-            Location = new Point(0, 15);
+            Size = new Size(880, 540);
+            Location = new Point(0, 0);
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint
+                     | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
 
             Build();
-            UiStyle.EnableDoubleBuffer(this);
             _utils.DisableSelectionInGuna2HtmlLabels(this);
 
-            // Le parent n'existe pas encore a la construction : on remet en page
-            // des qu'on y est rattache, puis a chaque redimensionnement.
-            ParentChanged += (s, e) => Layout();
-            SizeChanged += (s, e) => { if (_root != null) Layout(); };
+            ParentChanged += (s, e) => Relayout();
+            SizeChanged += (s, e) => Relayout();
         }
 
         // ---------- construction (aucune position ici) ----------
         private void Build()
         {
-            _root = new Guna2Panel
+            _logoBox = new Guna2PictureBox
             {
                 Parent = this,
-                FillColor = Color.Transparent,
-                BackColor = Color.Transparent,
-                BorderThickness = 0,
-                UseTransparentBackground = true,
-                Location = new Point(0, 0),
-            };
-            UiStyle.AttachContentBackdrop(_root);
-
-            // --- en-tete ---
-            _logoBox = new Guna2Button
-            {
-                Parent = _root,
-                Size = new Size(58, 58),
-                FillColor = Colors.scColor,
-                BorderThickness = 0,
-                BorderRadius = _logoRounded ? 29 : 14,
+                Size = new Size(54, 54),
+                SizeMode = PictureBoxSizeMode.Zoom,
                 Image = _logo,
-                ImageSize = new Size(38, 38),
-                Text = "",
-                Enabled = false,
-                UseTransparentBackground = true,
+                FillColor = Colors.scColor,
+                BorderRadius = _logoRounded ? 27 : 12,
+                BackColor = Color.Transparent,
             };
-            _logoBox.DisabledState.FillColor = Colors.scColor;
-            _logoBox.DisabledState.CustomBorderColor = Color.Transparent;
 
-            _title = MakeLabel(_name, Color.White, new Font("Inter Semibold", 19f), _root);
-            _kicker = MakeLabel("PaiPai", Colors.mainColor, new Font("Inter Semibold", 9f), _root);
+            _title = MakeLbl(_name, Color.White, new Font("Inter Semibold", 17f));
+            _kicker = MakeLbl("PaiPai", Colors.mainColor, new Font("Inter Semibold", 8.5f));
 
-            // --- galerie ---
-            _preview = MakeImageButton(_root, _shots.Length > 0 ? _shots[0] : _logo, 12);
+            _preview = new Guna2PictureBox
+            {
+                Parent = this,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Image = _shots.Length > 0 ? _shots[0] : _logo,
+                FillColor = Colors.scColor,
+                BorderRadius = 12,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand,
+            };
             _preview.Click += (s, e) => ShowOverlay();
+            AttachBorder(_preview, () => Color.FromArgb(38, 255, 255, 255), 12);
 
             _expandBtn = new Guna2CircleButton
             {
-                Parent = _root,
-                Size = new Size(40, 40),
+                Parent = this,
+                Size = new Size(38, 38),
                 FillColor = Color.FromArgb(190, 12, 8, 12),
                 BorderThickness = 0,
                 Image = Utils.ChangeIconsColor(new Bitmap(Images.ExpandedIcon), Color.White),
-                ImageSize = new Size(17, 17),
+                ImageSize = new Size(16, 16),
                 Cursor = Cursors.Hand,
                 Animated = true,
             };
-            _expandBtn.HoverState.FillColor = Color.FromArgb(220, Colors.mainColor);
+            _expandBtn.HoverState.FillColor = Color.FromArgb(225, Colors.mainColor);
             _expandBtn.Click += (s, e) => ShowOverlay();
 
-            // Vignettes : les captures, puis la video si elle existe.
             for (int i = 0; i < _shots.Length; i++)
             {
                 int index = i;
-                var t = MakeImageButton(_root, _shots[i], 9);
-                t.Cursor = Cursors.Hand;
+                var t = MakeThumb(_shots[i]);
                 t.Click += (s, e) => SelectShot(index);
                 _thumbs.Add(t);
             }
             if (_videoThumb != null && !string.IsNullOrWhiteSpace(_videoUrl))
             {
-                var v = MakeImageButton(_root, _videoThumb, 9);
-                v.Cursor = Cursors.Hand;
-                v.Image = _videoThumb;
+                var v = MakeThumb(_videoThumb);
                 v.Click += (s, e) => { try { _utils.OpenLink(_videoUrl); } catch { } };
-                // Pastille "play" dessinee par-dessus -> on distingue la video des captures.
+                // Pastille "play" par-dessus -> on distingue la video des captures.
                 v.Paint += (s, e) =>
                 {
                     var g = e.Graphics;
                     g.SmoothingMode = SmoothingMode.AntiAlias;
-                    float d = 34f, cx = v.Width / 2f, cy = v.Height / 2f;
-                    using (var b = new SolidBrush(Color.FromArgb(200, 12, 8, 12)))
+                    float d = Math.Min(30f, v.Height * 0.55f), cx = v.Width / 2f, cy = v.Height / 2f;
+                    using (var b = new SolidBrush(Color.FromArgb(205, 12, 8, 12)))
                         g.FillEllipse(b, cx - d / 2, cy - d / 2, d, d);
                     using (var b = new SolidBrush(Color.White))
                         g.FillPolygon(b, new[]
                         {
-                            new PointF(cx - 5, cy - 8), new PointF(cx + 9, cy), new PointF(cx - 5, cy + 8),
+                            new PointF(cx - d * 0.14f, cy - d * 0.22f),
+                            new PointF(cx + d * 0.24f, cy),
+                            new PointF(cx - d * 0.14f, cy + d * 0.22f),
                         });
                 };
                 _thumbs.Add(v);
             }
 
-            // --- carte d'informations ---
-            _infoCard = new Guna2Panel
+            _card = new Guna2Panel
             {
-                Parent = _root,
-                FillColor = Color.FromArgb(150, 38, 26, 38),
-                BorderColor = Color.FromArgb(46, 244, 114, 182),
+                Parent = this,
+                FillColor = Color.FromArgb(165, 38, 26, 38),
+                BorderColor = Color.FromArgb(52, 244, 114, 182),
                 BorderThickness = 1,
                 BorderRadius = 14,
-                UseTransparentBackground = true,
+                BackColor = Color.Transparent,
             };
 
             string[] tabs = { "About", "Requirements", "Features" };
@@ -216,81 +211,86 @@ namespace PlantillaChanchoV16.Template
                 int index = i;
                 var b = new Guna2Button
                 {
-                    Parent = _infoCard,
+                    Parent = _card,
                     Text = tabs[i],
-                    Font = new Font("Inter Semibold", 10f),
+                    Font = new Font("Inter Semibold", 9.5f),
                     FillColor = Color.Transparent,
                     BorderThickness = 0,
                     ForeColor = Colors.textMuted,
                     Cursor = Cursors.Hand,
+                    Height = 30,
                     UseTransparentBackground = true,
-                    Height = 34,
                 };
                 b.HoverState.ForeColor = Color.White;
                 b.Click += (s, e) => SelectTab(index);
                 _tabBtns[i] = b;
             }
 
-            _tabUnderline = new Guna2Panel
+            _underline = new Guna2Panel
             {
-                Parent = _infoCard,
+                Parent = _card,
                 Height = 2,
                 FillColor = Colors.mainColor,
                 BorderThickness = 0,
                 BorderRadius = 1,
-                UseTransparentBackground = true,
+                BackColor = Color.Transparent,
+            };
+
+            // Zone defilante : garantit qu'une description longue ne pousse JAMAIS
+            // le bouton hors de l'ecran, quelle que soit la taille de la fenetre.
+            _scrollArea = new Panel
+            {
+                Parent = _card,
+                AutoScroll = true,
+                BackColor = Color.Transparent,
             };
 
             _body = new Label
             {
-                Parent = _infoCard,
+                Parent = _scrollArea,
                 ForeColor = Colors.textSubtle,
                 BackColor = Color.Transparent,
-                Font = new Font("Inter Medium", 10f),
+                Font = new Font("Inter Medium", 9.5f),
                 AutoSize = false,
                 UseCompatibleTextRendering = false,
-                // Sans ceci, WinForms lit "&" comme un prefixe de raccourci clavier
-                // et l'AVALE : "Windows 10 & 11" s'affichait "Windows 10  11", et
-                // "EAC, BattlEye, Ricochet & Vanguard" perdait son "&".
+                // Sans ceci, WinForms lit "&" comme prefixe de raccourci clavier et
+                // l'AVALE : "Windows 10 & 11" s'affichait "Windows 10  11".
                 UseMnemonic = false,
+                Location = new Point(0, 0),
             };
 
             _listPanel = new Guna2Panel
             {
-                Parent = _infoCard,
+                Parent = _scrollArea,
                 FillColor = Color.Transparent,
                 BackColor = Color.Transparent,
                 BorderThickness = 0,
-                UseTransparentBackground = true,
+                Location = new Point(0, 0),
                 Visible = false,
             };
 
-            _metaLine = new Guna2Separator
-            {
-                Parent = _infoCard,
-                FillColor = Colors.divider,
-                UseTransparentBackground = true,
-            };
-            _versionKey = MakeLabel("Version", Color.White, new Font("Inter Semibold", 9.5f), _infoCard);
-            _versionVal = MakeLabel(_version, Colors.textMuted, new Font("Inter Medium", 9.5f), _infoCard);
-            _updateKey = MakeLabel("Last update", Color.White, new Font("Inter Semibold", 9.5f), _infoCard);
-            _updateVal = MakeLabel(_lastUpdate, Colors.textMuted, new Font("Inter Medium", 9.5f), _infoCard);
+            _metaLine = new Guna2Separator { Parent = _card, FillColor = Colors.divider };
+            _versionKey = MakeLbl("Version", Color.White, new Font("Inter Semibold", 9f), _card);
+            _versionVal = MakeLbl(_version, Colors.textMuted, new Font("Inter Medium", 9f), _card);
+            _updateKey = MakeLbl("Last update", Color.White, new Font("Inter Semibold", 9f), _card);
+            _updateVal = MakeLbl(_lastUpdate, Colors.textMuted, new Font("Inter Medium", 9f), _card);
 
             _launch = new Guna2Button
             {
-                Parent = _infoCard,
+                Parent = _card,
                 Text = "LAUNCH",
-                Font = new Font("Inter Semibold", 11f),
+                Font = new Font("Inter Semibold", 10.5f),
                 ForeColor = Color.White,
                 FillColor = Colors.mainColor,
                 BorderThickness = 0,
                 BorderRadius = 10,
-                Height = 46,
+                Height = 44,
                 Cursor = Cursors.Hand,
                 Animated = true,
-                UseTransparentBackground = true,
                 Image = Utils.ChangeIconsColor(new Bitmap(_images.PlayIcon), Color.White),
-                ImageSize = new Size(14, 15),
+                ImageSize = new Size(13, 14),
+                // ImageAlign ET TextAlign du meme cote : Left/Right ferait chevaucher
+                // l'icone et le texte.
                 ImageAlign = HorizontalAlignment.Left,
                 ImageOffset = new Point(14, 0),
             };
@@ -298,15 +298,15 @@ namespace PlantillaChanchoV16.Template
             _launch.PressedColor = ControlPaint.Dark(Colors.mainColor, 0.05f);
             _launch.ShadowDecoration.Enabled = true;
             _launch.ShadowDecoration.Color = Color.FromArgb(120, Colors.mainColor);
-            _launch.ShadowDecoration.Depth = 8;
+            _launch.ShadowDecoration.Depth = 7;
             _launch.Click += (s, e) => _openProduct?.Invoke();
 
             _report = new Guna2HtmlLabel
             {
-                Parent = _infoCard,
+                Parent = _card,
                 Text = "<u>Report a bug</u>",
                 ForeColor = Colors.mainColor,
-                Font = new Font("Inter Semibold", 9.5f),
+                Font = new Font("Inter Semibold", 9f),
                 BackColor = Color.Transparent,
                 AutoSize = true,
                 Cursor = Cursors.Hand,
@@ -316,6 +316,7 @@ namespace PlantillaChanchoV16.Template
 
             BuildOverlay();
             SelectTab(0);
+            SelectShot(0);
         }
 
         private void BuildOverlay()
@@ -323,9 +324,8 @@ namespace PlantillaChanchoV16.Template
             _overlay = new Guna2Panel
             {
                 Parent = this,
-                FillColor = Color.FromArgb(228, 10, 6, 10),
+                FillColor = Color.FromArgb(235, 10, 6, 10),
                 BorderThickness = 0,
-                UseTransparentBackground = false,
                 Visible = false,
             };
             _overlayImage = new Guna2PictureBox
@@ -333,65 +333,93 @@ namespace PlantillaChanchoV16.Template
                 Parent = _overlay,
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.Transparent,
+                FillColor = Color.Transparent,
+                BorderRadius = 10,
             };
-            var close = new Guna2CircleButton
+            _overlayClose = new Guna2CircleButton
             {
                 Parent = _overlay,
-                Size = new Size(42, 42),
-                FillColor = Color.FromArgb(200, 20, 12, 20),
+                Size = new Size(40, 40),
+                FillColor = Color.FromArgb(205, 20, 12, 20),
                 BorderThickness = 0,
                 Image = Utils.ChangeIconsColor(new Bitmap(_images.CloseIcon), Color.White),
-                ImageSize = new Size(15, 15),
+                ImageSize = new Size(14, 14),
                 Cursor = Cursors.Hand,
                 Animated = true,
             };
-            close.HoverState.FillColor = Color.FromArgb(230, 255, 95, 87);
-            close.Click += (s, e) => _overlay.Visible = false;
-            _overlay.Tag = close;
+            _overlayClose.HoverState.FillColor = Color.FromArgb(230, 255, 95, 87);
+            _overlayClose.Click += (s, e) => _overlay.Visible = false;
             _overlay.Click += (s, e) => _overlay.Visible = false;
+            _overlayImage.Click += (s, e) => _overlay.Visible = false;
         }
 
         // ---------- helpers ----------
-        private static Label MakeLabel(string text, Color color, Font font, Control parent)
+        private Label MakeLbl(string text, Color color, Font font, Control parent = null)
             => new Label
             {
-                Parent = parent,
+                Parent = parent ?? (Control)this,
                 Text = text,
                 ForeColor = color,
                 BackColor = Color.Transparent,
                 Font = font,
                 AutoSize = true,
+                UseMnemonic = false,
             };
 
-        private static Guna2Button MakeImageButton(Control parent, Image img, int radius)
+        // Peint un liseré arrondi par-dessus un Guna2PictureBox. La couleur est
+        // fournie par un callback pour qu'un simple Invalidate() reflète l'état
+        // courant (vignette active) sans avoir à retoucher chaque contrôle.
+        private static void AttachBorder(Guna2PictureBox box, Func<Color> color, int radius)
         {
-            var b = new Guna2Button
+            box.Paint += (s, e) =>
             {
-                Parent = parent,
-                Text = "",
-                FillColor = Colors.scColor,
-                BorderThickness = 1,
-                BorderColor = Color.FromArgb(34, 255, 255, 255),
-                BorderRadius = radius,
-                BackgroundImage = img,
-                BackgroundImageLayout = ImageLayout.Zoom,
-                UseTransparentBackground = true,
-                Animated = true,
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                var r = new Rectangle(0, 0, box.Width - 1, box.Height - 1);
+                using (var path = RoundedPath(r, radius))
+                using (var pen = new Pen(color(), 1.6f))
+                    e.Graphics.DrawPath(pen, path);
             };
-            b.HoverState.BorderColor = Color.FromArgb(150, Colors.mainColor);
-            b.DisabledState.FillColor = Colors.scColor;
-            return b;
+        }
+
+        private static GraphicsPath RoundedPath(Rectangle r, int radius)
+        {
+            int d = Math.Max(2, radius * 2);
+            var p = new GraphicsPath();
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+
+        private Guna2PictureBox MakeThumb(Image img)
+        {
+            var t = new Guna2PictureBox
+            {
+                Parent = this,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Image = img,
+                FillColor = Colors.scColor,
+                BorderRadius = 8,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand,
+            };
+            // Guna2PictureBox n'expose NI BorderColor NI BorderThickness : le liseré
+            // (et la mise en évidence de la vignette active) est peint a la main.
+            AttachBorder(t, () => _thumbs.IndexOf(t) == _activeShot
+                ? Colors.mainColor
+                : Color.FromArgb(38, 255, 255, 255), 8);
+            return t;
         }
 
         private void SelectShot(int index)
         {
-            if (index < 0 || index >= _shots.Length) return;
+            if (_shots.Length == 0) return;
+            index = Math.Max(0, Math.Min(index, _shots.Length - 1));
             _activeShot = index;
-            _preview.BackgroundImage = _shots[index];
-            for (int i = 0; i < _thumbs.Count; i++)
-                _thumbs[i].BorderColor = (i == index)
-                    ? Colors.mainColor
-                    : Color.FromArgb(34, 255, 255, 255);
+            _preview.Image = _shots[index];
+            foreach (var t in _thumbs) t.Invalidate();
         }
 
         private void ShowOverlay()
@@ -412,26 +440,24 @@ namespace PlantillaChanchoV16.Template
             bool isAbout = index == 0;
             _body.Visible = isAbout;
             _listPanel.Visible = !isAbout;
-
             if (!isAbout) FillList(index == 1);
-            if (_root != null) Layout();
+
+            Relayout();
         }
 
-        // Reconstruit la liste affichee (prerequis ou fonctionnalites). On la
-        // recree a chaque bascule plutot que de garder deux panneaux vivants :
-        // moins de controles en memoire, et aucune position a resynchroniser.
         private void FillList(bool requirements)
         {
-            foreach (Control c in _listPanel.Controls.Cast<Control>().ToList()) { _listPanel.Controls.Remove(c); c.Dispose(); }
+            foreach (Control c in _listPanel.Controls.Cast<Control>().ToList())
+            {
+                _listPanel.Controls.Remove(c);
+                c.Dispose();
+            }
 
-            // Le 4e element doit etre NOMME des deux cotes : sans `link:`, le tuple
-            // des fonctionnalites devient (string, Image, Color, string) et perd le
-            // nom, ce qui rend les deux branches incompatibles.
             var rows = requirements
-                ? _requirements.Select(r => (text: r.text, icon: r.icon, color: r.color, link: r.link)).ToList()
+                ? _requirements
                 : _features.Select(f => (text: f.text, icon: f.icon, color: f.color, link: (string)null)).ToList();
 
-            int y = 0;
+            int y = 0, w = Math.Max(60, _listPanel.Width);
             foreach (var row in rows)
             {
                 var b = new Guna2Button
@@ -439,183 +465,186 @@ namespace PlantillaChanchoV16.Template
                     Parent = _listPanel,
                     Text = "   " + row.text,
                     TextAlign = HorizontalAlignment.Left,
-                    Font = new Font("Inter Medium", 9.5f),
+                    Font = new Font("Inter Medium", 9f),
                     ForeColor = Colors.textSubtle,
-                    FillColor = Color.FromArgb(120, 38, 26, 38),
+                    FillColor = Color.FromArgb(120, 46, 32, 46),
                     BorderThickness = 0,
-                    BorderRadius = 9,
-                    Height = 38,
+                    BorderRadius = 8,
+                    Height = 36,
                     Location = new Point(0, y),
-                    Width = Math.Max(60, _listPanel.Width),
+                    Width = w,
                     Cursor = row.link != null ? Cursors.Hand : Cursors.Default,
-                    UseTransparentBackground = true,
-                    // ImageAlign ET TextAlign du meme cote : Left/Right ferait
-                    // chevaucher l'icone et le texte.
                     ImageAlign = HorizontalAlignment.Left,
                     ImageOffset = new Point(10, 0),
-                    ImageSize = new Size(16, 16),
+                    ImageSize = new Size(15, 15),
                     Image = row.icon == null ? null : Utils.ChangeIconsColor(new Bitmap(row.icon), row.color),
                 };
-                b.HoverState.FillColor = Color.FromArgb(170, 52, 36, 52);
+                b.HoverState.FillColor = Color.FromArgb(170, 60, 42, 60);
                 if (row.link != null)
                 {
                     string link = row.link;
                     b.Click += (s, e) => { try { _utils.OpenLink(link); } catch { } };
                 }
-                y += b.Height + 8;
+                y += b.Height + 7;
             }
-            _listPanel.Height = Math.Max(0, y - 8);
+            _listPanel.Height = Math.Max(0, y - 7);
         }
 
-        // ---------- mise en page (UNE seule source de verite) ----------
-        private new void Layout()
+        // ---------- mise en page ----------
+        private void Relayout()
         {
-            if (_root == null || _infoCard == null) return;
+            if (_card == null) return;
 
-            int hostW = (Parent != null && Parent.Width > 320) ? Parent.Width : Width;
-            int contentW = Math.Max(560, hostW) - Pad * 2;
+            // On TIENT dans l'hote, on ne le deborde jamais : le faire grandir ne
+            // ferait que deplacer le rognage.
+            int hostW = (Parent != null && Parent.Width > 400) ? Parent.Width : Width;
+            int hostH = (Parent != null && Parent.Height > 300) ? Parent.Height : Height;
+            if (Width != hostW || Height != hostH) { Size = new Size(hostW, hostH); }
 
-            // Colonne media un peu plus large que la colonne texte : la galerie
-            // porte l'attrait visuel, le texte se lit tres bien plus etroit.
-            int leftW = (int)(contentW * 0.56);
+            int contentW = hostW - Pad * 2;
+            int leftW = (int)(contentW * 0.55);
             int rightW = contentW - leftW - Gap;
-
-            _root.Location = new Point(0, 0);
-            _root.Width = Math.Max(hostW, contentW + Pad * 2);
 
             // --- en-tete ---
             int y = Pad;
             _logoBox.Location = new Point(Pad, y);
-            _title.Location = new Point(_logoBox.Right + 16, y + 6);
-            _kicker.Location = new Point(_logoBox.Right + 16, y + 6 + _title.Height + 1);
-            int headerBottom = Math.Max(_logoBox.Bottom, _kicker.Bottom);
+            _title.MaximumSize = new Size(leftW, 0);
+            _title.Location = new Point(_logoBox.Right + 14, y + 4);
+            _kicker.Location = new Point(_logoBox.Right + 14, _title.Bottom + 1);
+            y = Math.Max(_logoBox.Bottom, _kicker.Bottom) + 18;
 
-            y = headerBottom + 22;
+            int bodyTop = y;
+            int bottomLimit = hostH - Pad;
+            int available = Math.Max(200, bottomLimit - bodyTop);
 
-            // --- colonne gauche : preview 16/9 + vignettes ---
-            int previewH = (int)(leftW * 9f / 16f);
-            _preview.Location = new Point(Pad, y);
-            _preview.Size = new Size(leftW, previewH);
-            _expandBtn.Location = new Point(_preview.Right - _expandBtn.Width - 14, _preview.Bottom - _expandBtn.Height - 14);
-            _expandBtn.BringToFront();
-
+            // --- colonne gauche : vignettes d'abord (hauteur connue), le reste
+            // revient a l'apercu -> jamais de debordement vertical.
             int count = Math.Max(1, _thumbs.Count);
             int thumbW = (leftW - ThumbGap * (count - 1)) / count;
-            int thumbH = (int)(thumbW * 9f / 16f);
+            int thumbH = Math.Max(38, (int)(thumbW * 9f / 16f));
+            int previewH = Math.Min((int)(leftW * 9f / 16f), available - thumbH - ThumbGap);
+            previewH = Math.Max(120, previewH);
+
+            _preview.Location = new Point(Pad, bodyTop);
+            _preview.Size = new Size(leftW, previewH);
+            _expandBtn.Location = new Point(_preview.Right - _expandBtn.Width - 12, _preview.Bottom - _expandBtn.Height - 12);
+            _expandBtn.BringToFront();
+
             for (int i = 0; i < _thumbs.Count; i++)
             {
                 _thumbs[i].Location = new Point(Pad + i * (thumbW + ThumbGap), _preview.Bottom + ThumbGap);
                 _thumbs[i].Size = new Size(thumbW, thumbH);
             }
-            int leftBottom = _thumbs.Count > 0 ? _thumbs[0].Bottom : _preview.Bottom;
 
-            // --- colonne droite : carte d'infos ---
-            int cardX = Pad + leftW + Gap;
-            int inner = 18;
-            int innerW = rightW - inner * 2;
+            // --- colonne droite ---
+            _card.Location = new Point(Pad + leftW + Gap, bodyTop);
+            _card.Size = new Size(rightW, available);
 
-            _infoCard.Location = new Point(cardX, y);
-            _infoCard.Width = rightW;
+            int innerW = rightW - CardPad * 2;
+            int cx = CardPad, cy = CardPad;
 
-            // onglets
-            int tx = inner;
+            int tx = cx;
             foreach (var b in _tabBtns)
             {
-                // +34 et non +18 : Guna2Button applique sa propre marge interne, une
-                // largeur calee sur la seule mesure du texte tronquait les libelles
-                // ("About" -> "Abou", "Features" -> "Feature").
-                int w = TextRenderer.MeasureText(b.Text, b.Font).Width + 34;
-                b.Location = new Point(tx, inner);
+                // +30 : Guna2Button applique sa propre marge interne, une largeur
+                // calee sur la seule mesure du texte tronquait les libelles.
+                int w = TextRenderer.MeasureText(b.Text, b.Font).Width + 30;
+                b.Location = new Point(tx, cy);
                 b.Width = w;
-                tx += w + 6;
+                tx += w + 2;
             }
-            var active = _tabBtns[_activeTab];
-            _tabUnderline.Location = new Point(active.Left + 6, active.Bottom + 4);
-            _tabUnderline.Width = Math.Max(20, active.Width - 12);
+            var act = _tabBtns[_activeTab];
+            _underline.Location = new Point(act.Left + 8, act.Bottom + 3);
+            _underline.Width = Math.Max(18, act.Width - 16);
+            cy = _underline.Bottom + 14;
 
-            int cy = _tabUnderline.Bottom + 18;
+            // --- bloc bas (ancre au bas de la carte) : LAUNCH, meta, separateur ---
+            int bottom = available - CardPad;
 
-            // corps : About = texte mesure, sinon liste
+            _report.Location = new Point(cx + innerW - _report.Width, bottom - _report.Height);
+            bottom = _report.Top - 8;
+
+            _launch.Width = innerW;
+            _launch.Location = new Point(cx, bottom - _launch.Height);
+            bottom = _launch.Top - 16;
+
+            _updateKey.Location = new Point(cx, bottom - _updateKey.Height);
+            _updateVal.Location = new Point(cx + innerW - _updateVal.Width, _updateKey.Top);
+            bottom = _updateKey.Top - 6;
+
+            _versionKey.Location = new Point(cx, bottom - _versionKey.Height);
+            _versionVal.Location = new Point(cx + innerW - _versionVal.Width, _versionKey.Top);
+            bottom = _versionKey.Top - 12;
+
+            _metaLine.Width = innerW;
+            _metaLine.Location = new Point(cx, bottom - _metaLine.Height);
+            bottom = _metaLine.Top - 14;
+
+            // --- zone defilante : tout l'espace restant entre onglets et bloc bas ---
+            _scrollArea.Location = new Point(cx, cy);
+            _scrollArea.Size = new Size(innerW, Math.Max(60, bottom - cy));
+
+            int textW = innerW - 20;   // marge pour l'eventuelle barre de defilement
             if (_activeTab == 0)
             {
-                _body.Location = new Point(inner, cy);
-                _body.Width = innerW;
-                // Mesure REELLE du texte replie : c'est ce qui garantit qu'aucun
-                // element place dessous ne viendra le chevaucher.
-                //
-                // On mesure sur une largeur legerement INFERIEURE a celle du Label
-                // et on ajoute une ligne de marge : MeasureText et le rendu interne
-                // du Label ne replient pas toujours au meme mot, et un ecart d'un
-                // seul mot suffisait a faire disparaitre la derniere puce.
-                Size measured = TextRenderer.MeasureText(
-                    _description, _body.Font, new Size(innerW - 6, int.MaxValue),
+                _body.Width = textW;
+                // On mesure sur une largeur legerement inferieure et on ajoute une
+                // ligne : MeasureText et le rendu interne du Label ne replient pas
+                // toujours au meme mot, et un mot d'ecart suffisait a faire
+                // disparaitre la derniere ligne.
+                Size m = TextRenderer.MeasureText(_description, _body.Font,
+                    new Size(textW - 6, int.MaxValue),
                     TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
-                _body.Height = measured.Height + _body.Font.Height + 4;
+                _body.Height = m.Height + _body.Font.Height;
                 _body.Text = _description;
-                cy = _body.Bottom;
             }
             else
             {
-                _listPanel.Location = new Point(inner, cy);
-                _listPanel.Width = innerW;
-                foreach (Control row in _listPanel.Controls) row.Width = innerW;
-                cy = _listPanel.Bottom;
+                _listPanel.Width = textW;
+                foreach (Control row in _listPanel.Controls) row.Width = textW;
             }
 
-            // meta
-            cy += 20;
-            _metaLine.Location = new Point(inner, cy);
-            _metaLine.Width = innerW;
-            cy = _metaLine.Bottom + 12;
-
-            _versionKey.Location = new Point(inner, cy);
-            _versionVal.Location = new Point(inner + innerW - _versionVal.Width, cy);
-            cy += Math.Max(_versionKey.Height, _versionVal.Height) + 8;
-
-            _updateKey.Location = new Point(inner, cy);
-            _updateVal.Location = new Point(inner + innerW - _updateVal.Width, cy);
-            cy += Math.Max(_updateKey.Height, _updateVal.Height) + 20;
-
-            // action
-            _launch.Location = new Point(inner, cy);
-            _launch.Width = innerW;
-            cy = _launch.Bottom + 10;
-
-            _report.Location = new Point(inner + innerW - _report.Width, cy);
-            cy = _report.Bottom + inner;
-
-            _infoCard.Height = cy;
-
-            // --- hauteurs globales ---
-            int totalH = Math.Max(leftBottom, _infoCard.Bottom) + Pad;
-            _root.Height = totalH;
-            if (Height != totalH) Height = totalH;
-            int totalW = Math.Max(hostW, _infoCard.Right + Pad);
-            if (Width != totalW) Width = totalW;
-            _root.Size = new Size(totalW, totalH);
-
             LayoutOverlay();
+            Invalidate(true);
         }
 
         private void LayoutOverlay()
         {
             if (_overlay == null) return;
             _overlay.Location = new Point(0, 0);
-            _overlay.Size = new Size(Width, Height);
+            _overlay.Size = ClientSize;
 
-            int w = (int)(Width * 0.82), h = (int)(Height * 0.78);
-            _overlayImage.Size = new Size(w, h);
-            _overlayImage.Location = new Point((Width - w) / 2, (Height - h) / 2);
-            if (_overlay.Tag is Guna2CircleButton close)
-            {
-                close.Location = new Point(_overlayImage.Right - close.Width, _overlayImage.Top - close.Height - 8);
-                close.BringToFront();
-            }
+            int w = (int)(ClientSize.Width * 0.8), h = (int)(ClientSize.Height * 0.74);
+            _overlayImage.Size = new Size(Math.Max(80, w), Math.Max(60, h));
+            _overlayImage.Location = new Point((ClientSize.Width - _overlayImage.Width) / 2,
+                                               (ClientSize.Height - _overlayImage.Height) / 2 + 12);
+            _overlayClose.Location = new Point(_overlayImage.Right - _overlayClose.Width,
+                                               _overlayImage.Top - _overlayClose.Height - 10);
+            _overlayClose.BringToFront();
         }
 
+        // Fond peint par le FORMULAIRE lui-meme (comme WindowsPaiScreen) : c'est ce
+        // qui permet aux Label transparents de se composer sans rectangle parasite.
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width, Height);
+
+            using (var bg = new LinearGradientBrush(rect, Colors.bgColor,
+                       Color.FromArgb(44, 24, 40), LinearGradientMode.ForwardDiagonal))
+                g.FillRectangle(bg, rect);
+
+            using (var glow = new GraphicsPath())
+            {
+                glow.AddEllipse(Width - 320, -220, 460, 420);
+                using (var pgb = new PathGradientBrush(glow))
+                {
+                    pgb.CenterColor = Color.FromArgb(48, Colors.mainColor);
+                    pgb.SurroundColors = new[] { Color.FromArgb(0, Colors.mainColor) };
+                    g.FillPath(pgb, glow);
+                }
+            }
         }
     }
 }
