@@ -4,6 +4,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace PlantillaChanchoV16.Template
@@ -11,6 +12,11 @@ namespace PlantillaChanchoV16.Template
     // Petits dialogues sakura reutilises par BotManagerScreen. Regroupes dans un
     // seul fichier (chacun est court) pour eviter d'eparpiller le chrome
     // borderless/drag/glow (copie de SakuraInputDialog.cs) dans 4 fichiers separes.
+    //
+    // Chaque dialogue a sa hauteur calculee a la main a partir de la position
+    // reelle de son dernier controle (+ marge) -> evite le bug rencontre en v1
+    // (boutons Save/Cancel qui chevauchaient le champ dossier de
+    // BotProfileDialog car la hauteur du Form avait ete choisie au pif).
 
     // ---- Base commune : chrome borderless + glow + drag (identique aux autres dialogues sakura) ----
     internal abstract class SakuraDialogBase : Form
@@ -21,7 +27,7 @@ namespace PlantillaChanchoV16.Template
         protected SakuraDialogBase(int width, int height)
         {
             FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.CenterScreen;
+            StartPosition = FormStartPosition.CenterParent;
             Size = new Size(width, height);
             BackColor = Colors.bgColor;
             ShowInTaskbar = false;
@@ -31,7 +37,7 @@ namespace PlantillaChanchoV16.Template
             using (var p = Rounded(new Rectangle(0, 0, Width, Height), 14)) Region = new Region(p);
         }
 
-        protected Guna2HtmlLabel MakeWordmarkAndTitle(string title, int pad)
+        protected void MakeWordmarkAndTitle(string title, int pad)
         {
             var pai1 = new Guna2HtmlLabel { Parent = this, Text = "Pai", ForeColor = Color.White, Font = new Font("Inter Semibold", 12f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(pad, 20) };
             var pai2 = new Guna2HtmlLabel { Parent = this, Text = "Pai", ForeColor = Colors.mainColor, Font = new Font("Inter Semibold", 12f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false };
@@ -40,10 +46,9 @@ namespace PlantillaChanchoV16.Template
 
             var titleLbl = new Guna2HtmlLabel { Parent = this, Text = title, ForeColor = Colors.mainColor, Font = new Font("Inter Semibold", 15f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(pad, 48) };
             titleLbl.MouseDown += Drag;
-            return titleLbl;
         }
 
-        protected Guna2Button MakeButton(string text, bool accent, int width = 110)
+        protected Guna2Button MakeButton(string text, bool accent, int width = 110, int height = 44)
         {
             var b = new Guna2Button
             {
@@ -53,7 +58,7 @@ namespace PlantillaChanchoV16.Template
                 ForeColor = accent ? Color.White : Color.FromArgb(200, 255, 255, 255),
                 FillColor = accent ? Colors.mainColor : Colors.scColor,
                 BorderRadius = 10,
-                Size = new Size(width, 40),
+                Size = new Size(width, height),
                 Animated = true,
                 Cursor = Cursors.Hand,
                 UseTransparentBackground = true,
@@ -121,63 +126,71 @@ namespace PlantillaChanchoV16.Template
             tb.FocusedState.BorderColor = Colors.mainColor;
             return tb;
         }
+
+        protected Guna2HtmlLabel MakeFieldLabel(string text, int x, int y)
+        {
+            return new Guna2HtmlLabel { Parent = this, Text = text, ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent, Location = new Point(x, y) };
+        }
+
+        // Petit bouton icône (badge rond BotIcon rendu cliquable) réutilisé pour
+        // afficher/masquer le token et parcourir un dossier -> remplace les
+        // boutons texte-emoji de la v1 (👁/📁), incohérents avec le thème.
+        protected BotIcon MakeIconButton(BotIcon.Kind kind, Point loc, int size = 44)
+        {
+            var icon = new BotIcon(kind) { Parent = this, Location = loc, Size = new Size(size, size), Cursor = Cursors.Hand };
+            return icon;
+        }
     }
 
     // ---- Ajouter/Modifier un profil de bot ----
     internal class BotProfileDialog : SakuraDialogBase
     {
         private readonly Guna2TextBox _name, _token, _guildId, _folder;
-        private readonly Guna2Button _togglePassword, _browseFolder;
+        private readonly BotIcon _togglePassword;
 
         public BotProfile Result { get; private set; }
 
-        public BotProfileDialog(BotProfile? existing) : base(460, 430)
+        public BotProfileDialog(BotProfile? existing) : base(480, 520)
         {
             Result = existing ?? new BotProfile();
-            int pad = 28;
+            int pad = 30;
+            int fieldW = Width - pad * 2;
+            int iconFieldW = fieldW - 44 - 10; // largeur du champ quand une icône l'accompagne
+
             MakeWordmarkAndTitle(existing == null ? "Add bot" : "Edit bot", pad);
 
-            int y = 90;
-            AddLabel("Name", pad, y);
-            _name = MakeTextBox("e.g. PaiPai Community", new Point(pad, y + 20), new Size(Width - pad * 2, 42));
+            int y = 92;
+            MakeFieldLabel("Name", pad, y);
+            _name = MakeTextBox("e.g. PaiPai Community", new Point(pad, y + 20), new Size(fieldW, 44));
             _name.Text = Result.Name;
 
-            y += 76;
-            AddLabel("Bot token", pad, y);
-            _token = MakeTextBox("Discord bot token", new Point(pad, y + 20), new Size(Width - pad * 2 - 46, 42), password: true);
+            y += 88;
+            MakeFieldLabel("Bot token", pad, y);
+            _token = MakeTextBox("Discord bot token", new Point(pad, y + 20), new Size(iconFieldW, 44), password: true);
             _token.Text = existing != null ? BotProfileStore.Decrypt(existing.EncryptedTokenBase64) : "";
-            _togglePassword = new Guna2Button
+            _togglePassword = MakeIconButton(BotIcon.Kind.Eye, new Point(_token.Right + 10, y + 20));
+            _togglePassword.Click += (s, e) =>
             {
-                Parent = this, Text = "👁", Font = new Font("Inter Medium", 11f), ForeColor = Color.White,
-                FillColor = Colors.scColor, BorderRadius = 10, Size = new Size(38, 42),
-                Location = new Point(_token.Right + 8, y + 20), Cursor = Cursors.Hand, UseTransparentBackground = true,
+                _token.UseSystemPasswordChar = !_token.UseSystemPasswordChar;
+                _togglePassword.IconKind = _token.UseSystemPasswordChar ? BotIcon.Kind.Eye : BotIcon.Kind.EyeOff;
+                _togglePassword.Invalidate();
             };
-            _togglePassword.Click += (s, e) => _token.UseSystemPasswordChar = !_token.UseSystemPasswordChar;
 
-            y += 76;
-            AddLabel("Guild (server) ID", pad, y);
-            _guildId = MakeTextBox("Right-click your server -> Copy Server ID", new Point(pad, y + 20), new Size(Width - pad * 2, 42));
+            y += 88;
+            MakeFieldLabel("Guild (server) ID", pad, y);
+            _guildId = MakeTextBox("Right-click your server -> Copy Server ID", new Point(pad, y + 20), new Size(fieldW, 44));
             _guildId.Text = Result.GuildId;
 
-            y += 76;
-            AddLabel("Local bot folder (optional — enables Start/Stop + tickets)", pad, y);
-            _folder = MakeTextBox("Not set", new Point(pad, y + 20), new Size(Width - pad * 2 - 46, 42));
-            _folder.ReadOnly = true;
+            y += 88;
+            MakeFieldLabel("Local bot folder — leave empty if the bot is hosted elsewhere (24/7)", pad, y);
+            _folder = MakeTextBox("Not set — paste a path or use the folder button", new Point(pad, y + 20), new Size(iconFieldW, 44));
             _folder.Text = Result.LocalFolderPath ?? "";
-            _browseFolder = new Guna2Button
-            {
-                Parent = this, Text = "📁", Font = new Font("Inter Medium", 11f), ForeColor = Color.White,
-                FillColor = Colors.scColor, BorderRadius = 10, Size = new Size(38, 42),
-                Location = new Point(_folder.Right + 8, y + 20), Cursor = Cursors.Hand, UseTransparentBackground = true,
-            };
-            _browseFolder.Click += (s, e) =>
-            {
-                using var fbd = new FolderBrowserDialog { Description = "Select the bot project folder (contains index.js)" };
-                if (fbd.ShowDialog(this) == DialogResult.OK) _folder.Text = fbd.SelectedPath;
-            };
+            var browseFolder = MakeIconButton(BotIcon.Kind.Folder, new Point(_folder.Right + 10, y + 20));
+            browseFolder.Click += (s, e) => PickFolderAsync();
 
+            int buttonsY = y + 20 + 44 + 28; // sous le dernier champ (Folder), jamais chevauché
             var ok = MakeButton("Save", true);
-            ok.Location = new Point(Width - pad - ok.Width, Height - 60);
+            ok.Location = new Point(Width - pad - ok.Width, buttonsY);
             ok.Click += (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(_name.Text) || string.IsNullOrWhiteSpace(_token.Text) || string.IsNullOrWhiteSpace(_guildId.Text))
@@ -194,7 +207,7 @@ namespace PlantillaChanchoV16.Template
             };
 
             var cancel = MakeButton("Cancel", false, 100);
-            cancel.Location = new Point(ok.Left - cancel.Width - 10, Height - 60);
+            cancel.Location = new Point(ok.Left - cancel.Width - 10, buttonsY);
             cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
             AcceptButton = ok;
@@ -202,9 +215,38 @@ namespace PlantillaChanchoV16.Template
             this.MouseDown += Drag;
         }
 
-        private void AddLabel(string text, int x, int y)
+        // Le sélecteur de dossier Windows se bloque ("PaiPai ne répond pas") quand
+        // il est ouvert AVEC POUR PARENT une fenêtre borderless à Region
+        // personnalisée — c'est le cas de tout le chrome sakura de l'app. On le
+        // lance donc sur son propre thread STA, SANS parent : il ne peut plus
+        // geler l'UI, et le champ reste saisissable à la main de toute façon.
+        private void PickFolderAsync()
         {
-            var l = new Guna2HtmlLabel { Parent = this, Text = text, ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent, Location = new Point(x, y) };
+            var t = new Thread(() =>
+            {
+                string? picked = null;
+                try
+                {
+                    using var fbd = new FolderBrowserDialog
+                    {
+                        Description = "Select the bot project folder (contains index.js)",
+                        AutoUpgradeEnabled = false,
+                        ShowNewFolderButton = false,
+                    };
+                    if (fbd.ShowDialog() == DialogResult.OK) picked = fbd.SelectedPath;
+                }
+                catch { /* si le shell refuse d'ouvrir le picker, l'utilisateur peut taper le chemin */ }
+
+                if (picked == null) return;
+                try
+                {
+                    if (!IsDisposed) BeginInvoke(new Action(() => _folder.Text = picked));
+                }
+                catch { /* dialogue déjà fermé entre-temps */ }
+            });
+            t.SetApartmentState(ApartmentState.STA);
+            t.IsBackground = true;
+            t.Start();
         }
     }
 
@@ -216,25 +258,27 @@ namespace PlantillaChanchoV16.Template
         public string TitleValue => _title.Text;
         public string BodyValue => _body.Text;
 
-        public SakuraTwoFieldDialog(string dialogTitle, string titleLabel, string bodyLabel) : base(480, 400)
+        public SakuraTwoFieldDialog(string dialogTitle, string titleLabel, string bodyLabel) : base(500, 476)
         {
-            int pad = 28;
+            int pad = 30;
+            int fieldW = Width - pad * 2;
             MakeWordmarkAndTitle(dialogTitle, pad);
 
-            var l1 = new Guna2HtmlLabel { Parent = this, Text = titleLabel, ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent, Location = new Point(pad, 90) };
-            _title = MakeTextBox("", new Point(pad, 110), new Size(Width - pad * 2, 42));
+            MakeFieldLabel(titleLabel, pad, 94);
+            _title = MakeTextBox("", new Point(pad, 114), new Size(fieldW, 46));
 
-            var l2 = new Guna2HtmlLabel { Parent = this, Text = bodyLabel, ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent, Location = new Point(pad, 166) };
+            MakeFieldLabel(bodyLabel, pad, 184);
             _body = new Guna2TextBox
             {
-                Parent = this, Location = new Point(pad, 186), Size = new Size(Width - pad * 2, 130),
+                Parent = this, Location = new Point(pad, 204), Size = new Size(fieldW, 180),
                 Multiline = true, BorderRadius = 10, FillColor = Colors.scColor, BorderColor = Colors.scColor,
                 ForeColor = Color.White, Font = new Font("Inter Medium", 10f), Animated = true,
             };
             _body.FocusedState.BorderColor = Colors.mainColor;
 
+            int buttonsY = 204 + 180 + 26;
             var ok = MakeButton("Post", true);
-            ok.Location = new Point(Width - pad - ok.Width, Height - 60);
+            ok.Location = new Point(Width - pad - ok.Width, buttonsY);
             ok.Click += (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(_title.Text) || string.IsNullOrWhiteSpace(_body.Text))
@@ -246,7 +290,7 @@ namespace PlantillaChanchoV16.Template
                 Close();
             };
             var cancel = MakeButton("Cancel", false, 100);
-            cancel.Location = new Point(ok.Left - cancel.Width - 10, Height - 60);
+            cancel.Location = new Point(ok.Left - cancel.Width - 10, buttonsY);
             cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
             AcceptButton = ok;
@@ -263,36 +307,38 @@ namespace PlantillaChanchoV16.Template
         public string SelectedProductName => _product.SelectedItem?.ToString() ?? "";
         public string StateValue => _state.SelectedIndex switch { 0 => "online", 1 => "maintenance", _ => "offline" };
 
-        public BotStatusDialog(string[] productNames) : base(420, 300)
+        public BotStatusDialog(string[] productNames) : base(440, 344)
         {
-            int pad = 28;
+            int pad = 30;
+            int fieldW = Width - pad * 2;
             MakeWordmarkAndTitle("Set product status", pad);
 
-            var l1 = new Guna2HtmlLabel { Parent = this, Text = "Product", ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent, Location = new Point(pad, 90) };
+            MakeFieldLabel("Product", pad, 94);
             _product = new Guna2ComboBox
             {
-                Parent = this, Location = new Point(pad, 110), Size = new Size(Width - pad * 2, 42),
-                FillColor = Colors.scColor, BorderColor = Colors.scColor, ForeColor = Color.White,
+                Parent = this, Location = new Point(pad, 114), Size = new Size(fieldW, 46),
                 Font = new Font("Inter Medium", 10f), BorderRadius = 10,
             };
+            GunaTheme.StyleCombo(_product);
             _product.Items.AddRange(productNames);
             if (_product.Items.Count > 0) _product.SelectedIndex = 0;
 
-            var l2 = new Guna2HtmlLabel { Parent = this, Text = "New state", ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent, Location = new Point(pad, 166) };
+            MakeFieldLabel("New state", pad, 184);
             _state = new Guna2ComboBox
             {
-                Parent = this, Location = new Point(pad, 186), Size = new Size(Width - pad * 2, 42),
-                FillColor = Colors.scColor, BorderColor = Colors.scColor, ForeColor = Color.White,
+                Parent = this, Location = new Point(pad, 204), Size = new Size(fieldW, 46),
                 Font = new Font("Inter Medium", 10f), BorderRadius = 10,
             };
+            GunaTheme.StyleCombo(_state);
             _state.Items.AddRange(new object[] { "🟢 Online", "🟡 Maintenance", "🔴 Offline" });
             _state.SelectedIndex = 0;
 
+            int buttonsY = 204 + 46 + 28;
             var ok = MakeButton("Update", true);
-            ok.Location = new Point(Width - pad - ok.Width, Height - 56);
+            ok.Location = new Point(Width - pad - ok.Width, buttonsY);
             ok.Click += (s, e) => { DialogResult = DialogResult.OK; Close(); };
             var cancel = MakeButton("Cancel", false, 100);
-            cancel.Location = new Point(ok.Left - cancel.Width - 10, Height - 56);
+            cancel.Location = new Point(ok.Left - cancel.Width - 10, buttonsY);
             cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
             AcceptButton = ok;
@@ -304,21 +350,22 @@ namespace PlantillaChanchoV16.Template
     // ---- Affichage d'un texte en lecture seule (tickets, resultats, ...) ----
     internal class SakuraInfoDialog : SakuraDialogBase
     {
-        public SakuraInfoDialog(string title, string content) : base(520, 460)
+        public SakuraInfoDialog(string title, string content) : base(560, 500)
         {
-            int pad = 28;
+            int pad = 30;
             MakeWordmarkAndTitle(title, pad);
 
+            int boxY = 94, boxH = Height - boxY - 80;
             var box = new Guna2TextBox
             {
-                Parent = this, Location = new Point(pad, 90), Size = new Size(Width - pad * 2, Height - 90 - 70),
+                Parent = this, Location = new Point(pad, boxY), Size = new Size(Width - pad * 2, boxH),
                 Multiline = true, ReadOnly = true, BorderRadius = 10, FillColor = Colors.scColor,
                 BorderColor = Colors.scColor, ForeColor = Color.White, Font = new Font("Consolas", 9.5f),
                 Text = content, ScrollBars = ScrollBars.Vertical,
             };
 
             var close = MakeButton("Close", true);
-            close.Location = new Point(Width - pad - close.Width, Height - 56);
+            close.Location = new Point(Width - pad - close.Width, boxY + boxH + 20);
             close.Click += (s, e) => Close();
 
             this.MouseDown += Drag;

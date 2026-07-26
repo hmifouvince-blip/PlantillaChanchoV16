@@ -7,16 +7,23 @@ que soit qui l'utilise.
 
 ## 1. Workflow de collaboration Git
 
-- **Avant** de lire ou modifier quoi que ce soit : `git pull origin master`
-  (un autre développeur a pu pousser des changements entre-temps).
-- Si le pull ramène des commits : résume ce qui a changé avant de continuer,
-  et vérifie que le projet compile toujours.
-- **Après** une modification à livrer : `git add`, `git commit` (message
+- **Au début de CHAQUE session**, avant de lire ou modifier quoi que ce soit :
+  `git pull origin master` (un autre développeur a pu pousser des changements
+  entre-temps).
+- Si le pull ramène des commits : résume ce qui a changé (quels fichiers, quel
+  comportement), relance `dotnet build` pour vérifier que le projet compile
+  toujours, et signale immédiatement tout conflit avec le travail en cours.
+- **Après** une modification à livrer : `git add -A`, `git commit` (message
   clair), `git push origin master`.
+- Après un push réussi : dire explicitement à l'utilisateur ce qui vient d'être
+  poussé, pour qu'il puisse prévenir l'autre développeur qu'il y a du nouveau à
+  récupérer.
 - Si le push est refusé (rejected/non-fast-forward) : `git pull` d'abord,
   résous un éventuel conflit, puis repousse.
 - Ne jamais committer `bin/` ou `obj/` (déjà exclus par `.gitignore`).
 - Prévenir l'utilisateur avant tout `git push`.
+- Travailler sur `master` (branche partagée). Un travail resté sur une branche
+  locale ou non committé est invisible pour l'autre développeur.
 
 ## 2. Identité de l'application (à chaque mise à jour livrée)
 

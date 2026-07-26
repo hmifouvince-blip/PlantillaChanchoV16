@@ -15,8 +15,11 @@ using System.Windows.Forms;
 namespace PlantillaChanchoV16.Template
 {
     // Bot Manager : pilote le bot Discord PaiPai depuis l'appli elle-meme.
-    // Calque visuel exact de WindowsPaiScreen.cs (meme fenetre borderless
-    // sakura, glow, drag, bannieres a accent). Deux volets independants :
+    // Calque visuel de WindowsPaiScreen.cs (fenetre borderless sakura, glow,
+    // drag, bannieres a accent), avec une geometrie a marge de securite genereuse
+    // (contrairement a la v1, chaque section utilise un curseur Y cumulatif ->
+    // aucune section ne peut chevaucher la suivante par erreur de calcul).
+    // Deux volets independants :
     // - Process local (node index.js) si un dossier est renseigne pour le profil actif ;
     // - Actions API Discord directes (marchent meme sans process local).
     internal class BotManagerScreen : Form
@@ -35,19 +38,20 @@ namespace PlantillaChanchoV16.Template
 
         private static readonly BotProcessManager Proc = new BotProcessManager();
 
-        private Guna2ComboBox _profileCombo;
-        private Guna2Button _startStopBtn;
-        private Label _procStatus;
-        private TextBox _log;
-        private BotProfile? _active;
-
         private const int Pad = 34;
+
+        private Guna2ComboBox _profileCombo;
+        private Guna2Button _addBtn, _editBtn, _delBtn;
+        private Guna2Button _startStopBtn, _restartBtn;
+        private Label _procStatus, _procHint;
+        private Guna2TextBox _log;
+        private BotProfile? _active;
 
         public BotManagerScreen()
         {
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterScreen;
-            Size = new Size(840, 640);
+            Size = new Size(880, 760);
             BackColor = Colors.bgColor;
             ShowInTaskbar = false;
             DoubleBuffered = true;
@@ -67,35 +71,76 @@ namespace PlantillaChanchoV16.Template
             { Parent = this, Location = new Point(Width - 42, 18) };
             close.Clicked += (s, e) => Close();
 
-            BuildProfileBar();
-            BuildProcessBanner();
-            BuildLogPanel();
-            BuildQuickActions();
+            int y = BuildProfileBar(112);
+            y = BuildProcessBanner(y + 22);
+            y = BuildLogPanel(y + 26);
+            BuildQuickActions(y + 26);
 
-            LoadActiveProfile();
+            ReloadProfileCombo();
             Proc.OutputReceived += line => AppendLog(line);
-            Proc.Exited += () => { BeginInvoke(new Action(() => { AppendLog("[process] Le bot s'est arrêté."); RefreshProcUi(); })); };
+            Proc.Exited += () => BeginInvoke(new Action(() => { AppendLog("[process] Le bot s'est arrêté."); RefreshProcUi(); }));
 
             this.MouseDown += Drag;
-            this.FormClosed += (s, e) => { /* On laisse le bot tourner en arrière-plan si l'utilisateur ferme l'écran. */ };
         }
 
         // ---- Barre de profils (multi-bot) ----
-        private void BuildProfileBar()
+        private int BuildProfileBar(int y)
         {
             var lbl = new Guna2HtmlLabel
             {
-                Parent = this, Text = "Active bot", ForeColor = Color.FromArgb(170, 255, 255, 255),
-                Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent,
-                Location = new Point(Pad, 106)
+                Parent = this, Text = "ACTIVE BOT", ForeColor = Color.FromArgb(150, 255, 255, 255),
+                Font = new Font("Inter Semibold", 8.5f), AutoSize = true, BackColor = Color.Transparent,
+                Location = new Point(Pad, y)
             };
 
+            int rowY = y + 20, rowH = 44;
+
+            _delBtn = MakeSmallButton("Delete", rowH, 92);
+            _delBtn.Location = new Point(Width - Pad - _delBtn.Width, rowY);
+            _delBtn.ForeColor = Color.FromArgb(255, 130, 120);
+            _delBtn.Click += (s, e) =>
+            {
+                if (_active == null) return;
+                var r = SakuraMessageBox.Show($"Delete bot profile \"{_active.Name}\"?", "Bot Manager", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (r != DialogResult.Yes) return;
+                if (Proc.IsRunning) Proc.Stop();
+                BotProfileStore.Delete(_active.Id);
+                ReloadProfileCombo();
+            };
+
+            _editBtn = MakeSmallButton("Edit", rowH, 80);
+            _editBtn.Location = new Point(_delBtn.Left - 10 - _editBtn.Width, rowY);
+            _editBtn.Click += (s, e) =>
+            {
+                if (_active == null) return;
+                using var dlg = new BotProfileDialog(_active);
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    BotProfileStore.AddOrUpdate(dlg.Result);
+                    ReloadProfileCombo();
+                }
+            };
+
+            _addBtn = MakeSmallButton("+ Add", rowH, 92);
+            _addBtn.Location = new Point(_editBtn.Left - 10 - _addBtn.Width, rowY);
+            _addBtn.Click += (s, e) =>
+            {
+                using var dlg = new BotProfileDialog(null);
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    BotProfileStore.AddOrUpdate(dlg.Result);
+                    BotProfileStore.SetActive(dlg.Result.Id);
+                    ReloadProfileCombo();
+                }
+            };
+
+            int comboW = _addBtn.Left - 14 - Pad;
             _profileCombo = new Guna2ComboBox
             {
-                Parent = this, Location = new Point(Pad, 126), Size = new Size(Width - Pad * 2 - 320, 40),
-                FillColor = Colors.scColor, BorderColor = Colors.scColor, ForeColor = Color.White,
-                Font = new Font("Inter Medium", 10f), BorderRadius = 10,
+                Parent = this, Location = new Point(Pad, rowY), Size = new Size(comboW, rowH),
+                Font = new Font("Inter Medium", 10.5f), BorderRadius = 10,
             };
+            GunaTheme.StyleCombo(_profileCombo);
             _profileCombo.SelectedIndexChanged += (s, e) =>
             {
                 if (_profileCombo.SelectedIndex < 0) return;
@@ -109,51 +154,16 @@ namespace PlantillaChanchoV16.Template
                 RefreshProcUi();
             };
 
-            int bx = Width - Pad - 300;
-            var addBtn = MakeSmallButton("+ Add", bx, 126, 90);
-            addBtn.Click += (s, e) =>
-            {
-                using var dlg = new BotProfileDialog(null);
-                if (dlg.ShowDialog(this) == DialogResult.OK)
-                {
-                    BotProfileStore.AddOrUpdate(dlg.Result);
-                    BotProfileStore.SetActive(dlg.Result.Id);
-                    ReloadProfileCombo();
-                }
-            };
-
-            var editBtn = MakeSmallButton("Edit", bx + 96, 126, 90);
-            editBtn.Click += (s, e) =>
-            {
-                if (_active == null) return;
-                using var dlg = new BotProfileDialog(_active);
-                if (dlg.ShowDialog(this) == DialogResult.OK)
-                {
-                    BotProfileStore.AddOrUpdate(dlg.Result);
-                    ReloadProfileCombo();
-                }
-            };
-
-            var delBtn = MakeSmallButton("Delete", bx + 192, 126, 100);
-            delBtn.ForeColor = Color.FromArgb(255, 120, 110);
-            delBtn.Click += (s, e) =>
-            {
-                if (_active == null) return;
-                var r = SakuraMessageBox.Show($"Delete bot profile \"{_active.Name}\"?", "Bot Manager", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (r != DialogResult.Yes) return;
-                if (Proc.IsRunning) Proc.Stop();
-                BotProfileStore.Delete(_active.Id);
-                ReloadProfileCombo();
-            };
+            return rowY + rowH;
         }
 
-        private Guna2Button MakeSmallButton(string text, int x, int y, int width)
+        private Guna2Button MakeSmallButton(string text, int height, int width)
         {
             var b = new Guna2Button
             {
                 Parent = this, Text = text, Font = new Font("Inter Semibold", 9.5f), ForeColor = Color.White,
-                FillColor = Colors.scColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(width, 40),
-                Location = new Point(x, y), Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
+                FillColor = Colors.scColor, BorderRadius = 10, BorderThickness = 0, Size = new Size(width, height),
+                Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
             };
             b.HoverState.FillColor = ControlPaint.Light(Colors.scColor, 0.3f);
             return b;
@@ -174,48 +184,44 @@ namespace PlantillaChanchoV16.Template
             RefreshProcUi();
         }
 
-        private void LoadActiveProfile()
-        {
-            ReloadProfileCombo();
-        }
-
         // ---- Banniere de controle du process local ----
         private Guna2Panel _banner;
-        private void BuildProcessBanner()
+        private int _bannerTop;
+        private int BuildProcessBanner(int y)
         {
+            _bannerTop = y;
+            int bannerH = 78;
             _banner = new Guna2Panel
             {
-                Parent = this, Location = new Point(Pad, 178), Size = new Size(Width - Pad * 2, 62),
+                Parent = this, Location = new Point(Pad, y), Size = new Size(Width - Pad * 2, bannerH),
                 FillColor = Colors.scColor, BorderRadius = 12, BorderThickness = 0, UseTransparentBackground = true,
                 CustomBorderThickness = new Padding(3, 0, 0, 0), CustomBorderColor = Colors.mainColor
             };
-            var icon = new StatusDot { Parent = _banner, Location = new Point(24, (62 - 20) / 2), Size = new Size(20, 20) };
+
+            new BotIcon(BotIcon.Kind.Bot) { Parent = _banner, Location = new Point(18, (bannerH - 48) / 2), Size = new Size(48, 48) };
+
             _procStatus = new Label
             {
                 Parent = _banner, Text = "No bot selected", ForeColor = Color.FromArgb(190, 255, 255, 255),
-                BackColor = Color.Transparent, Font = new Font("Inter Semibold", 10.5f), AutoSize = true,
-                Location = new Point(58, 20)
+                BackColor = Color.Transparent, Font = new Font("Inter Semibold", 11f), AutoSize = true,
+                Location = new Point(80, 16)
             };
-
-            _startStopBtn = new Guna2Button
+            _procHint = new Label
             {
-                Parent = _banner, Text = "Start", Font = new Font("Inter Semibold", 10f), ForeColor = Color.White,
-                FillColor = Colors.mainColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(120, 40),
-                Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
-                Location = new Point(_banner.Width - 260, (62 - 40) / 2)
+                Parent = _banner, Text = "Add a bot profile to get started.", ForeColor = Color.FromArgb(140, 255, 255, 255),
+                BackColor = Color.Transparent, Font = new Font("Inter Medium", 8.5f), AutoSize = true,
+                Location = new Point(80, 42)
             };
-            _startStopBtn.HoverState.FillColor = ControlPaint.Light(Colors.mainColor, 0.2f);
-            _startStopBtn.Click += (s, e) => ToggleProcess();
 
-            var restartBtn = new Guna2Button
+            _restartBtn = new Guna2Button
             {
                 Parent = _banner, Text = "Restart", Font = new Font("Inter Semibold", 10f), ForeColor = Color.White,
-                FillColor = Colors.scColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(120, 40),
+                FillColor = Colors.bgColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(112, 42),
                 Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
-                Location = new Point(_banner.Width - 130, (62 - 40) / 2)
             };
-            restartBtn.HoverState.FillColor = ControlPaint.Light(Colors.scColor, 0.3f);
-            restartBtn.Click += (s, e) =>
+            _restartBtn.Location = new Point(_banner.Width - 18 - _restartBtn.Width, (bannerH - 42) / 2);
+            _restartBtn.HoverState.FillColor = ControlPaint.Light(Colors.bgColor, 0.3f);
+            _restartBtn.Click += (s, e) =>
             {
                 if (_active?.LocalFolderPath == null) return;
                 AppendLog("[process] Redémarrage…");
@@ -223,6 +229,18 @@ namespace PlantillaChanchoV16.Template
                 if (!ok) AppendLog($"[erreur] {error}");
                 RefreshProcUi();
             };
+
+            _startStopBtn = new Guna2Button
+            {
+                Parent = _banner, Text = "Start", Font = new Font("Inter Semibold", 10f), ForeColor = Color.White,
+                FillColor = Colors.mainColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(124, 42),
+                Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
+            };
+            _startStopBtn.Location = new Point(_restartBtn.Left - 10 - _startStopBtn.Width, (bannerH - 42) / 2);
+            _startStopBtn.HoverState.FillColor = ControlPaint.Light(Colors.mainColor, 0.2f);
+            _startStopBtn.Click += (s, e) => ToggleProcess();
+
+            return y + bannerH;
         }
 
         private void ToggleProcess()
@@ -253,41 +271,64 @@ namespace PlantillaChanchoV16.Template
 
         private void RefreshProcUi()
         {
-            if (_active == null)
+            bool hasProfile = _active != null;
+            bool hasFolder = hasProfile && !string.IsNullOrEmpty(_active!.LocalFolderPath);
+            bool running = Proc.IsRunning;
+
+            _startStopBtn.Enabled = hasProfile;
+            _restartBtn.Enabled = hasProfile && hasFolder;
+
+            if (!hasProfile)
             {
                 _procStatus.Text = "No bot selected";
                 _procStatus.ForeColor = Color.FromArgb(150, 152, 168);
-                _startStopBtn.Enabled = false;
-                return;
+                _procHint.Text = "Add a bot profile to get started.";
+            }
+            else
+            {
+                // Sans dossier local, "stopped" serait mensonger : le bot tourne
+                // peut-être très bien sur un hébergeur distant, on n'en sait rien ici.
+                _procStatus.Text = !hasFolder ? $"{_active!.Name} — remote hosting"
+                                 : running ? $"{_active!.Name} — running"
+                                 : $"{_active!.Name} — stopped";
+                _procStatus.ForeColor = running ? Colors.mainColor : Color.FromArgb(190, 255, 255, 255);
+                _procHint.Text = hasFolder
+                    ? (running ? "Process controlled locally." : "Ready to start.")
+                    : "Hosted elsewhere — quick actions below still work.";
             }
 
-            _startStopBtn.Enabled = true;
-            bool running = Proc.IsRunning;
-            _procStatus.Text = running ? $"{_active.Name} — running" : $"{_active.Name} — stopped";
-            _procStatus.ForeColor = running ? Colors.mainColor : Color.FromArgb(190, 255, 255, 255);
             _startStopBtn.Text = running ? "Stop" : "Start";
-            _startStopBtn.FillColor = running ? Colors.scColor : Colors.mainColor;
-            _startStopBtn.HoverState.FillColor = running ? ControlPaint.Light(Colors.scColor, 0.3f) : ControlPaint.Light(Colors.mainColor, 0.2f);
-            _banner.Invalidate();
+            _startStopBtn.FillColor = running ? Colors.bgColor : Colors.mainColor;
+            _startStopBtn.HoverState.FillColor = running ? ControlPaint.Light(Colors.bgColor, 0.3f) : ControlPaint.Light(Colors.mainColor, 0.2f);
+            _banner.Invalidate(true);
         }
 
         // ---- Panneau de logs en direct ----
-        private void BuildLogPanel()
+        private int BuildLogPanel(int y)
         {
             var lbl = new Guna2HtmlLabel
             {
-                Parent = this, Text = "Live console", ForeColor = Color.FromArgb(170, 255, 255, 255),
-                Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent,
-                Location = new Point(Pad, 250)
+                Parent = this, Text = "LIVE CONSOLE", ForeColor = Color.FromArgb(150, 255, 255, 255),
+                Font = new Font("Inter Semibold", 8.5f), AutoSize = true, BackColor = Color.Transparent,
+                Location = new Point(Pad, y)
             };
 
-            _log = new TextBox
+            var clearBtn = MakeSmallButton("Clear", 28, 70);
+            clearBtn.Font = new Font("Inter Semibold", 8.5f);
+            clearBtn.Location = new Point(Width - Pad - clearBtn.Width, y - 4);
+            clearBtn.Click += (s, e) => _log.Clear();
+
+            int boxY = y + 26, boxH = 234;
+            _log = new Guna2TextBox
             {
-                Parent = this, Location = new Point(Pad, 270), Size = new Size(Width - Pad * 2, 200),
+                Parent = this, Location = new Point(Pad, boxY), Size = new Size(Width - Pad * 2, boxH),
                 Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
-                BackColor = Colors.bgColor, ForeColor = Color.FromArgb(200, 255, 255, 255),
-                Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle,
+                FillColor = Colors.bgColor, BorderColor = Colors.scColor, ForeColor = Color.FromArgb(210, 255, 255, 255),
+                Font = new Font("Consolas", 9f), BorderRadius = 10,
             };
+            _log.FocusedState.BorderColor = Colors.scColor;
+
+            return boxY + boxH;
         }
 
         private void AppendLog(string line)
@@ -297,23 +338,26 @@ namespace PlantillaChanchoV16.Template
         }
 
         // ---- Actions rapides (API Discord directe) ----
-        private void BuildQuickActions()
+        private void BuildQuickActions(int y)
         {
             var lbl = new Guna2HtmlLabel
             {
-                Parent = this, Text = "Quick actions", ForeColor = Color.FromArgb(170, 255, 255, 255),
-                Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent,
-                Location = new Point(Pad, 484)
+                Parent = this, Text = "QUICK ACTIONS", ForeColor = Color.FromArgb(150, 255, 255, 255),
+                Font = new Font("Inter Semibold", 8.5f), AutoSize = true, BackColor = Color.Transparent,
+                Location = new Point(Pad, y)
             };
 
-            int y = 504, w = (Width - Pad * 2 - 30) / 4, h = 60;
-            BuildActionCard("📢", "Announcement", "Post in #announcements", new Point(Pad, y), w, h, async () => await DoAnnounce());
-            BuildActionCard("🆕", "Update", "Post in #updates", new Point(Pad + (w + 10) * 1, y), w, h, async () => await DoUpdate());
-            BuildActionCard("📊", "Status", "Edit #status", new Point(Pad + (w + 10) * 2, y), w, h, async () => await DoStatus());
-            BuildActionCard("🎫", "Tickets", "View open tickets", new Point(Pad + (w + 10) * 3, y), w, h, DoViewTickets);
+            int rowY = y + 24, gap = 16, h = 92;
+            int contentW = Width - Pad * 2;
+            int w = (contentW - gap * 3) / 4;
+
+            BuildActionCard(BotIcon.Kind.Announcement, "Announcement", "→ #announcements", new Point(Pad, rowY), w, h, async () => await DoAnnounce());
+            BuildActionCard(BotIcon.Kind.Update, "Update", "→ #updates", new Point(Pad + (w + gap) * 1, rowY), w, h, async () => await DoUpdate());
+            BuildActionCard(BotIcon.Kind.Status, "Status", "→ #status", new Point(Pad + (w + gap) * 2, rowY), w, h, async () => await DoStatus());
+            BuildActionCard(BotIcon.Kind.Tickets, "Tickets", "Open list", new Point(Pad + (w + gap) * 3, rowY), w, h, DoViewTickets);
         }
 
-        private void BuildActionCard(string emoji, string title, string subtitle, Point loc, int w, int h, Action onClick)
+        private void BuildActionCard(BotIcon.Kind kind, string title, string subtitle, Point loc, int w, int h, Action onClick)
         {
             var card = new Guna2Panel
             {
@@ -322,13 +366,20 @@ namespace PlantillaChanchoV16.Template
                 UseTransparentBackground = true, Cursor = Cursors.Hand,
                 CustomBorderThickness = new Padding(3, 0, 0, 0), CustomBorderColor = Colors.mainColor
             };
-            var e1 = new Label { Parent = card, Text = emoji, Font = new Font("Segoe UI Emoji", 14f), BackColor = Color.Transparent, AutoSize = true, Location = new Point(12, 8) };
-            var t1 = new Guna2HtmlLabel { Parent = card, Text = title, ForeColor = Color.White, Font = new Font("Inter Semibold", 10f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(12, 32) };
-            var t2 = new Guna2HtmlLabel { Parent = card, Text = subtitle, ForeColor = Color.FromArgb(150, 255, 255, 255), Font = new Font("Inter Medium", 8f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(12, 50) };
+            var icon = new BotIcon(kind) { Parent = card, Location = new Point(14, (h - 40) / 2), Size = new Size(40, 40) };
+            var t1 = new Guna2HtmlLabel { Parent = card, Text = title, ForeColor = Color.White, Font = new Font("Inter Semibold", 10f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(64, 26) };
+            var t2 = new Guna2HtmlLabel { Parent = card, Text = subtitle, ForeColor = Color.FromArgb(150, 255, 255, 255), Font = new Font("Inter Medium", 8f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(64, 46) };
 
-            // Un clic sur n'importe quel enfant doit compter comme un clic sur la carte.
-            foreach (Control c in new Control[] { card, e1, t1, t2 })
-                c.Click += (s, e) => onClick();
+            var controls = new Control[] { card, icon, t1, t2 };
+            foreach (Control c in controls) c.Click += (s, e) => onClick();
+
+            Color normal = Colors.scColor, hover = ControlPaint.Light(Colors.scColor, 0.18f);
+            void SetHover(bool on) { card.FillColor = on ? hover : normal; card.Invalidate(); }
+            foreach (Control c in controls)
+            {
+                c.MouseEnter += (s, e) => SetHover(true);
+                c.MouseLeave += (s, e) => SetHover(false);
+            }
         }
 
         private bool EnsureConnected(out string token, out string guildId)
@@ -408,7 +459,7 @@ namespace PlantillaChanchoV16.Template
             }
 
             // Pas de dossier local / pas de message de statut suivi -> on ne peut pas
-            // savoir quel message editer. On prevdéfinit plutôt que de risquer un
+            // savoir quel message editer. On previent plutôt que de risquer un
             // doublon silencieux.
             var r = SakuraMessageBox.Show(
                 "No tracked status message found (needs the bot's local folder, or /setup-server was never run).\nPost a brand-new status message in #status instead?",
@@ -454,7 +505,8 @@ namespace PlantillaChanchoV16.Template
             var open = storeData["openTickets"] as JObject;
             if (open == null || !open.Properties().Any())
             {
-                new SakuraInfoDialog("Open tickets", "No open tickets right now.").ShowDialog(this);
+                using var empty = new SakuraInfoDialog("Open tickets", "No open tickets right now.");
+                empty.ShowDialog(this);
                 return;
             }
 
@@ -474,7 +526,8 @@ namespace PlantillaChanchoV16.Template
                 sb.AppendLine();
                 n++;
             }
-            new SakuraInfoDialog($"Open tickets ({open.Properties().Count()})", sb.ToString().TrimEnd()).ShowDialog(this);
+            using var dlg = new SakuraInfoDialog($"Open tickets ({open.Properties().Count()})", sb.ToString().TrimEnd());
+            dlg.ShowDialog(this);
         }
 
         // Lit data/store.json dans le dossier local du profil actif (si configure).
@@ -503,27 +556,6 @@ namespace PlantillaChanchoV16.Template
                 File.WriteAllText(path, data.ToString());
             }
             catch { /* best-effort: le prochain /status-set du bot re-synchronisera de toute facon */ }
-        }
-
-        // ---- Pastille d'etat dessinee (vert = actif, gris = a l'arret) ----
-        private class StatusDot : Control
-        {
-            public StatusDot()
-            {
-                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint
-                         | ControlStyles.UserPaint | ControlStyles.SupportsTransparentBackColor, true);
-                DoubleBuffered = true;
-                BackColor = Color.Transparent;
-            }
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                Graphics g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                bool running = Proc.IsRunning;
-                Color c = running ? Colors.mainColor : Color.FromArgb(120, 122, 138);
-                using (var glow = new SolidBrush(Color.FromArgb(60, c))) g.FillEllipse(glow, 0, 0, Width, Height);
-                using (var br = new SolidBrush(c)) g.FillEllipse(br, 4, 4, Width - 8, Height - 8);
-            }
         }
 
         private Label MakeLbl(string text, Color color, Font font, Point loc, bool drag)
