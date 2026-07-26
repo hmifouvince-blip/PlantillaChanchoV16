@@ -2,90 +2,55 @@
 // announcement card in EACH product's own channel, plus a short directory
 // in #products linking to all of them. Reused by /setup-server for
 // automatic initialization.
-const {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  AttachmentBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  MessageFlags,
-} = require("discord.js");
-const branding = require("../config/branding");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require("discord.js");
 const products = require("../config/products");
 const store = require("../utils/store");
 const { BUY_BUTTON_PREFIX } = require("../features/tickets");
-
-const STATUS_LABELS = {
-  online: "🟢 Available",
-  maintenance: "🟡 Maintenance",
-  offline: "🔴 Unavailable",
-};
+const {
+  productEmbed,
+  productComponents,
+  brandedEmbed,
+  logoAttachment,
+  filesFor,
+  STATUS_LABELS,
+} = require("../utils/embeds");
 
 // Posts one product's rich announcement card into its OWN channel.
 async function postProductCard(channel, product) {
   const statusMap = store.load().productStatus;
   const state = statusMap[product.key] || product.defaultStatus;
 
-  const heroAttachment = new AttachmentBuilder(product.imagePath, {
-    name: product.imageAttachmentName,
+  await channel.send({
+    embeds: [productEmbed(product, state)],
+    files: filesFor(product),
+    components: productComponents(product, `${BUY_BUTTON_PREFIX}${product.key}`),
   });
-  const logoAttachment = new AttachmentBuilder(branding.logoPath, {
-    name: branding.logoAttachmentName,
-  });
-
-  const embed = new EmbedBuilder()
-    .setColor(branding.colors.main)
-    .setAuthor({ name: "PaiPai", iconURL: `attachment://${branding.logoAttachmentName}` })
-    .setTitle(`${product.emoji} ${product.name}`)
-    .setDescription(`*${product.tagline}*\n\n${product.description}`)
-    .setImage(`attachment://${product.imageAttachmentName}`)
-    .addFields(
-      { name: "Status", value: STATUS_LABELS[state] || STATUS_LABELS.online, inline: true },
-      { name: "How to get it", value: "Click **Buy Now** below 👇", inline: true }
-    )
-    .setFooter({
-      text: `${branding.footerText} • Premium tools, premium experience`,
-      iconURL: `attachment://${branding.logoAttachmentName}`,
-    });
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${BUY_BUTTON_PREFIX}${product.key}`)
-      .setLabel(`Buy ${product.name}`)
-      .setEmoji("🛒")
-      .setStyle(ButtonStyle.Success)
-  );
-
-  await channel.send({ embeds: [embed], files: [heroAttachment, logoAttachment], components: [row] });
 }
 
 // Posts the short directory embed in #products, linking to each product's
 // dedicated channel via a real channel mention.
 async function postDirectory(directoryChannel, channelsByProductKey) {
-  const logoAttachment = new AttachmentBuilder(branding.logoPath, {
-    name: branding.logoAttachmentName,
-  });
+  const statusMap = store.load().productStatus;
 
   const lines = products.map((p) => {
     const ch = channelsByProductKey[p.key];
-    return `${p.emoji} **${p.name}** — ${ch ? `${ch}` : "_channel missing_"}`;
+    const state = statusMap[p.key] || p.defaultStatus;
+    // La pastille de statut est le 1er "mot" du libelle.
+    const dot = (STATUS_LABELS[state] || STATUS_LABELS.online).split(" ")[0];
+    const target = ch ? `${ch}` : "_salon manquant_";
+    return `${dot} ${p.emoji} **${p.name}** — ${target}`;
   });
 
-  const embed = new EmbedBuilder()
-    .setColor(branding.colors.main)
-    .setTitle("🌸 PaiPai — Premium Tools")
-    .setDescription(
-      "Everything you need, built with care and refined for performance.\n" +
-        "Head to a product's own channel below to learn more and buy it:\n\n" +
-        lines.join("\n")
-    )
-    .setImage(`attachment://${branding.logoAttachmentName}`)
-    .setFooter({ text: branding.footerText });
+  const embed = brandedEmbed({
+    kicker: "PaiPai",
+    title: "🌸 Nos produits",
+    description:
+      "Chaque produit a son propre salon : présentation complète, tarifs et achat en un clic.\n\n" +
+      lines.join("\n"),
+    footer: `PaiPai • ${products.length} produits`,
+  });
 
-  await directoryChannel.send({ embeds: [embed], files: [logoAttachment] });
+  await directoryChannel.send({ embeds: [embed], files: [logoAttachment()] });
 }
 
 async function clearBotMessages(channel) {

@@ -14,11 +14,32 @@ const crypto = require("node:crypto");
 const util = require("node:util");
 const store = require("../utils/store");
 const products = require("../config/products");
+const branding = require("../config/branding");
+const link = require("../features/link");
 const { buildStatusEmbed, logoAttachment } = require("../commands/status-set");
+const { postAnnounce } = require("../commands/announce");
+const { postUpdate } = require("../commands/update-post");
 
 const MAX_LINES = 300;
 const MAX_BODY_BYTES = 64 * 1024;
 const VALID_STATES = ["online", "maintenance", "offline"];
+
+// Anti-force brute sur l'echange de code : cette route est la SEULE
+// joignable sans authentification, elle merite donc son propre garde-fou.
+const REDEEM_MAX_ATTEMPTS = 10;
+const REDEEM_WINDOW_MS = 10 * 60 * 1000;
+const redeemAttempts = new Map(); // ip -> { count, resetAt }
+
+function tooManyRedeems(ip) {
+  const now = Date.now();
+  const entry = redeemAttempts.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    redeemAttempts.set(ip, { count: 1, resetAt: now + REDEEM_WINDOW_MS });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > REDEEM_MAX_ATTEMPTS;
+}
 
 // Tampon circulaire des dernieres lignes de console. Chaque ligne porte un
 // numero de sequence croissant : PaiPai demande "tout ce qui est apparu depuis
@@ -58,12 +79,30 @@ function captureConsole() {
 // Comparaison a temps constant. On hache les deux cotes avant de comparer :
 // timingSafeEqual LEVE une exception si les longueurs different, ce qui
 // trahirait a lui seul la longueur de la vraie cle.
-function authorized(req) {
-  const provided = req.headers["x-paipai-key"];
-  if (typeof provided !== "string") return false;
+function sameSecret(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string") return false;
   const a = crypto.createHash("sha256").update(provided).digest();
-  const b = crypto.createHash("sha256").update(process.env.CONTROL_KEY).digest();
+  const b = crypto.createHash("sha256").update(expected).digest();
   return crypto.timingSafeEqual(a, b);
+}
+
+// Deux facons de s'authentifier, volontairement distinctes :
+// - x-paipai-key    : la cle d'infrastructure (celui qui administre l'hebergeur)
+// - x-paipai-token  : un jeton personnel obtenu via /link, adosse a un role
+//                     Discord et revocable en retirant ce role
+// Renvoie null si aucune des deux ne convient.
+function identify(req) {
+  if (sameSecret(req.headers["x-paipai-key"], process.env.CONTROL_KEY)) {
+    return { kind: "key", label: "clé de contrôle", roles: [] };
+  }
+
+  const token = req.headers["x-paipai-token"];
+  const session = link.verifyToken(token);
+  if (session) {
+    return { kind: "session", label: session.tag, roles: session.roles, token, session };
+  }
+
+  return null;
 }
 
 function readJsonBody(req) {
@@ -102,11 +141,45 @@ async function handle(req, res, client) {
     res.end(body);
   };
 
-  // Seule route non authentifiee : sert aux robots de keep-alive des
-  // hebergeurs qui exigent du trafic HTTP. Ne divulgue rien.
+  // Route non authentifiee : sert aux robots de keep-alive des hebergeurs
+  // qui exigent du trafic HTTP. Ne divulgue rien.
   if (url.pathname === "/ping") return send(200, { ok: true });
 
-  if (!authorized(req)) return send(401, { ok: false, error: "Clé de contrôle invalide." });
+  // Amorcage de la liaison : forcement accessible sans jeton, puisque son
+  // but est justement d'en delivrer un. La protection vient du code (court,
+  // a usage unique, 10 min) + du controle de role + du garde-fou anti-force
+  // brute ci-dessous.
+  if (req.method === "POST" && url.pathname === "/link/redeem") {
+    const ip = req.socket.remoteAddress || "?";
+    if (tooManyRedeems(ip)) {
+      return send(429, { ok: false, error: "Trop de tentatives. Réessaie dans 10 minutes." });
+    }
+    const body = await readJsonBody(req);
+    const result = await link.redeemCode(client, body.code);
+    if (!result.ok) return send(403, result);
+    console.log(`[link] ${result.tag} a lié une application PaiPai (${result.roles.join(", ")}).`);
+    return send(200, result);
+  }
+
+  const caller = identify(req);
+  if (!caller) {
+    return send(401, {
+      ok: false,
+      error: "Non autorisé : clé de contrôle absente/invalide, ou lien Discord expiré (retape /link).",
+    });
+  }
+
+  // Qui suis-je : permet a PaiPai d'afficher le compte lie et de detecter
+  // qu'un jeton a ete revoque sans attendre l'echec d'une action.
+  if (req.method === "GET" && url.pathname === "/me") {
+    return send(200, {
+      ok: true,
+      kind: caller.kind,
+      label: caller.label,
+      roles: caller.roles,
+      adminRoleNames: branding.adminRoleNames,
+    });
+  }
 
   if (req.method === "GET" && url.pathname === "/health") {
     const guild = client.guilds.cache.get(process.env.GUILD_ID) || null;
@@ -131,7 +204,54 @@ async function handle(req, res, client) {
     });
   }
 
+  // A partir d'ici, les routes PUBLIENT ou AGISSENT -> on recontrole les
+  // roles Discord aupres du serveur. Le simple sondage d'etat (/health,
+  // /logs) s'en dispense volontairement : il tourne toutes les 3 s et
+  // n'expose rien de destructif.
+  if (caller.kind === "session" && !(await link.revalidate(client, caller.token))) {
+    return send(403, {
+      ok: false,
+      error: `Accès révoqué : tu n'as plus le rôle ${branding.adminRoleNames.join(" ou ")}.`,
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/announce") {
+    const body = await readJsonBody(req);
+    const title = String(body.title || "").trim();
+    const message = String(body.message || "").trim();
+    if (!title || !message) return send(400, { ok: false, error: "Titre et message obligatoires." });
+
+    const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
+    if (!guild) return send(409, { ok: false, error: "Serveur Discord introuvable." });
+
+    const result = await postAnnounce(guild, { title, message, ping: body.ping === true });
+    if (result.ok) console.log(`[control] Annonce publiée par ${caller.label} : « ${title} ».`);
+    return send(result.ok ? 200 : 409, result);
+  }
+
+  if (req.method === "POST" && url.pathname === "/update") {
+    const body = await readJsonBody(req);
+    const title = String(body.title || "").trim();
+    const changelog = String(body.changelog || "").trim();
+    if (!title || !changelog) return send(400, { ok: false, error: "Titre et changelog obligatoires." });
+
+    const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
+    if (!guild) return send(409, { ok: false, error: "Serveur Discord introuvable." });
+
+    const result = await postUpdate(guild, {
+      title,
+      changelog,
+      productKey: body.productKey ? String(body.productKey) : null,
+      version: body.version ? String(body.version) : null,
+      note: body.note ? String(body.note) : null,
+      ping: body.ping === true,
+    });
+    if (result.ok) console.log(`[control] Mise à jour publiée par ${caller.label} : « ${title} ».`);
+    return send(result.ok ? 200 : 409, result);
+  }
+
   if (req.method === "POST" && url.pathname === "/restart") {
+    console.log(`[control] Redémarrage demandé par ${caller.label}.`);
     send(200, { ok: true, message: "Redémarrage en cours." });
     // On laisse la reponse partir avant de mourir. Sortie code 0 : tous les
     // hebergeurs relancent automatiquement le process.

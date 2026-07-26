@@ -16,6 +16,14 @@ const DEFAULTS = {
   // id du message de la page de statut, pour l'EDITER au lieu d'en
   // reposter un nouveau a chaque /status-set.
   statusMessage: null, // { channelId, messageId }
+
+  // Liaison Discord <-> application PaiPai (features/link.js).
+  // code a usage unique -> { userId, expiresAt }
+  linkCodes: {},
+  // EMPREINTE SHA-256 du jeton -> { userId, tag, roles, createdAt, expiresAt }.
+  // On ne stocke jamais le jeton lui-meme : ce fichier vit chez l'hebergeur,
+  // une copie ne doit pas suffire a piloter le bot.
+  sessions: {},
 };
 
 function load() {

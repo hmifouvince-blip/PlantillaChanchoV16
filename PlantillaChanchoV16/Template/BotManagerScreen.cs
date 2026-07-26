@@ -46,7 +46,8 @@ namespace PlantillaChanchoV16.Template
         private const int Pad = 34;
 
         private Guna2ComboBox _profileCombo;
-        private Guna2Button _addBtn, _editBtn, _delBtn;
+        private Guna2Button _addBtn, _editBtn, _delBtn, _linkBtn;
+        private Guna2HtmlLabel _linkedLbl;
         private Guna2Button _startStopBtn, _restartBtn;
         private Label _procStatus, _procHint;
         private Guna2TextBox _log;
@@ -59,7 +60,15 @@ namespace PlantillaChanchoV16.Template
 
         private bool IsRemote => _active != null && !string.IsNullOrWhiteSpace(_active.RemoteUrl);
         private string RemoteUrl => _active?.RemoteUrl ?? "";
-        private string RemoteKey => _active == null ? "" : BotProfileStore.Decrypt(_active.EncryptedControlKeyBase64);
+
+        // Les deux identifiants partent ensemble : le bot retient le premier
+        // valide. Un membre de l'equipe n'a que le jeton (obtenu via /link),
+        // l'administrateur de l'hebergeur n'a souvent que la cle.
+        private BotRemoteApi.Auth RemoteAuth => _active == null
+            ? BotRemoteApi.Auth.None
+            : new BotRemoteApi.Auth(
+                BotProfileStore.Decrypt(_active.EncryptedControlKeyBase64),
+                BotProfileStore.Decrypt(_active.EncryptedSessionTokenBase64));
 
         public BotManagerScreen()
         {
@@ -131,6 +140,16 @@ namespace PlantillaChanchoV16.Template
                 Location = new Point(Pad, y)
             };
 
+            // Compte Discord lie, affiche a droite du libelle de section : c'est
+            // la seule information d'identite de tout l'ecran, elle doit etre
+            // visible sans ouvrir un dialogue.
+            _linkedLbl = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "", ForeColor = Colors.mainColor,
+                Font = new Font("Inter Semibold", 8.5f), AutoSize = true, BackColor = Color.Transparent,
+                IsSelectionEnabled = false, Location = new Point(Pad + 100, y)
+            };
+
             int rowY = y + 20, rowH = 44;
 
             _delBtn = MakeSmallButton("Delete", rowH, 92);
@@ -172,7 +191,13 @@ namespace PlantillaChanchoV16.Template
                 }
             };
 
-            int comboW = _addBtn.Left - 14 - Pad;
+            _linkBtn = MakeSmallButton("Link Discord", rowH, 120);
+            _linkBtn.Location = new Point(_addBtn.Left - 10 - _linkBtn.Width, rowY);
+            _linkBtn.FillColor = Colors.mainColor;
+            _linkBtn.HoverState.FillColor = ControlPaint.Light(Colors.mainColor, 0.2f);
+            _linkBtn.Click += (s, e) => LinkDiscord();
+
+            int comboW = _linkBtn.Left - 14 - Pad;
             _profileCombo = new Guna2ComboBox
             {
                 Parent = this, Location = new Point(Pad, rowY), Size = new Size(comboW, rowH),
@@ -228,6 +253,44 @@ namespace PlantillaChanchoV16.Template
             StartOrStopPolling();
         }
 
+        // Lie le compte Discord de l'utilisateur a ce profil : il tape /link
+        // dans Discord, colle le code, et obtient un jeton personnel. Il n'a
+        // alors besoin NI du token du bot NI de la cle de controle -> c'est ce
+        // qui rend le Bot Manager utilisable par toute l'equipe, et pas
+        // seulement par celui qui administre l'hebergeur.
+        private void LinkDiscord()
+        {
+            if (_active == null)
+            {
+                SakuraMessageBox.Show("Add a bot profile first.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var dlg = new BotLinkDialog(_active.RemoteUrl);
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            _active.RemoteUrl = dlg.Url;
+            _active.EncryptedSessionTokenBase64 = BotProfileStore.Encrypt(dlg.Token);
+            _active.LinkedDiscordTag = dlg.LinkedTag;
+            BotProfileStore.AddOrUpdate(_active);
+
+            AppendLog($"[link] Compte Discord lié : {dlg.LinkedTag}.");
+            SakuraMessageBox.Show($"Linked as {dlg.LinkedTag}.\nYou can now control the bot from PaiPai.",
+                "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            // Le profil vient peut-etre de passer local -> distant : il faut
+            // (re)demarrer le sondage, sinon l'etat resterait fige.
+            _lastLogSeq = 0;
+            RefreshProcUi();
+            StartOrStopPolling();
+        }
+
+        private void RefreshLinkedLabel()
+        {
+            string? tag = _active?.LinkedDiscordTag;
+            _linkedLbl.Text = string.IsNullOrWhiteSpace(tag) ? "" : $"🔗 {tag}";
+        }
+
         // ---- Banniere de controle du process local ----
         private Guna2Panel _banner;
         private int _bannerTop;
@@ -270,7 +333,7 @@ namespace PlantillaChanchoV16.Template
                 if (IsRemote)
                 {
                     AppendLog("[distant] Demande de redémarrage…");
-                    var result = await BotRemoteApi.Restart(RemoteUrl, RemoteKey);
+                    var result = await BotRemoteApi.Restart(RemoteUrl, RemoteAuth);
                     AppendLog(result.Success
                         ? "[distant] Redémarrage demandé — l'hébergeur relance le bot."
                         : $"[erreur] {result.Error}");
@@ -334,8 +397,10 @@ namespace PlantillaChanchoV16.Template
             bool hasFolder = hasProfile && !string.IsNullOrEmpty(_active!.LocalFolderPath);
             bool running = Proc.IsRunning;
 
+            RefreshLinkedLabel();
             _startStopBtn.Enabled = hasProfile;
             _restartBtn.Enabled = hasProfile && (IsRemote || hasFolder);
+            _linkBtn.Enabled = hasProfile;
 
             if (!hasProfile)
             {
@@ -395,14 +460,15 @@ namespace PlantillaChanchoV16.Template
             _pollBusy = true;
             try
             {
-                string url = RemoteUrl, key = RemoteKey;
+                string url = RemoteUrl;
+                var auth = RemoteAuth;
 
-                var health = await BotRemoteApi.Health(url, key);
+                var health = await BotRemoteApi.Health(url, auth);
                 if (IsDisposed || !IsRemote) return;
                 ApplyRemoteHealth(health);
                 if (!health.Success) return;
 
-                var logs = await BotRemoteApi.Logs(url, key, _lastLogSeq);
+                var logs = await BotRemoteApi.Logs(url, auth, _lastLogSeq);
                 if (IsDisposed || !IsRemote) return;
                 if (logs.Success && logs.Data?["lines"] is JArray lines)
                 {
@@ -559,12 +625,27 @@ namespace PlantillaChanchoV16.Template
             return true;
         }
 
+        // Publier en passant par le BOT plutot que par l'API Discord directe
+        // des que c'est possible : la mise en page riche (logo sakura,
+        // changelog colore, vignette produit) vit dans
+        // paipai-discord-bot/utils/embeds.js. La reconstruire ici la ferait
+        // diverger a la premiere retouche visuelle -> le rendu dependrait de
+        // qui publie, ce qui est exactement ce qu'on veut eviter.
         private async Task DoAnnounce()
         {
-            if (!EnsureConnected(out var token, out var guildId)) return;
+            if (!IsRemote && !EnsureConnected(out _, out _)) return;
+
             using var dlg = new SakuraTwoFieldDialog("Post announcement", "Title", "Message");
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
+            if (IsRemote)
+            {
+                var remote = await BotRemoteApi.Announce(RemoteUrl, RemoteAuth, dlg.TitleValue, dlg.BodyValue, ping: false);
+                Report(remote.Success, "Announcement posted.", remote.Error);
+                return;
+            }
+
+            EnsureConnected(out var token, out var guildId);
             string? channelId = await DiscordApi.FindTextChannelIdByName(token, guildId, "announcements");
             if (channelId == null)
             {
@@ -573,31 +654,53 @@ namespace PlantillaChanchoV16.Template
             }
             var embed = DiscordApi.BuildEmbed($"📢 {dlg.TitleValue}", dlg.BodyValue, 0xE384AE, "PaiPai");
             var result = await DiscordApi.PostMessage(token, channelId, embed, pingEveryone: false);
-            SakuraMessageBox.Show(result.Success ? "Announcement posted." : $"Failed: {result.Error}", "Bot Manager",
-                MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+            Report(result.Success, "Announcement posted.", result.Error);
         }
 
         private async Task DoUpdate()
         {
-            if (!EnsureConnected(out var token, out var guildId)) return;
-            using var dlg = new SakuraTwoFieldDialog("Post update", "Title", "Description");
+            if (!IsRemote && !EnsureConnected(out _, out _)) return;
+
+            using var dlg = new BotUpdateDialog(Products);
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
+            if (IsRemote)
+            {
+                var remote = await BotRemoteApi.Update(RemoteUrl, RemoteAuth, dlg.TitleValue, dlg.ChangelogValue,
+                    dlg.ProductKey, NullIfEmpty(dlg.VersionValue), NullIfEmpty(dlg.NoteValue), dlg.PingValue);
+                Report(remote.Success, "Update posted.", remote.Error);
+                return;
+            }
+
+            // Repli sans bot joignable : l'API Discord ne sait pas produire le
+            // bloc ```diff colore, on publie donc le changelog tel quel.
+            EnsureConnected(out var token, out var guildId);
             string? channelId = await DiscordApi.FindTextChannelIdByName(token, guildId, "updates");
             if (channelId == null)
             {
                 SakuraMessageBox.Show("#updates channel not found on this server.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            var embed = DiscordApi.BuildEmbed($"🆕 {dlg.TitleValue}", dlg.BodyValue, 0xE384AE, "PaiPai");
-            var result = await DiscordApi.PostMessage(token, channelId, embed, pingEveryone: false);
-            SakuraMessageBox.Show(result.Success ? "Update posted." : $"Failed: {result.Error}", "Bot Manager",
-                MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+            string title = string.IsNullOrEmpty(dlg.VersionValue) ? dlg.TitleValue : $"{dlg.TitleValue} • {dlg.VersionValue}";
+            string body = "```diff\n" + dlg.ChangelogValue + "\n```";
+            if (dlg.NoteValue.Length > 0) body += $"\n⚠️ {dlg.NoteValue}";
+            var embed = DiscordApi.BuildEmbed($"🆕 {title}", body, 0xE384AE, "PaiPai");
+            var result = await DiscordApi.PostMessage(token, channelId, embed, pingEveryone: dlg.PingValue);
+            Report(result.Success, "Update posted.", result.Error);
+        }
+
+        private static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
+
+        private void Report(bool success, string okMessage, string? error)
+        {
+            SakuraMessageBox.Show(success ? okMessage : $"Failed: {error}", "Bot Manager",
+                MessageBoxButtons.OK, success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         }
 
         private async Task DoStatus()
         {
-            if (!EnsureConnected(out var token, out var guildId)) return;
+            if (!IsRemote && !EnsureConnected(out _, out _)) return;
+
             using var dlg = new BotStatusDialog(Products.Select(p => p.Name).ToArray());
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
@@ -609,12 +712,12 @@ namespace PlantillaChanchoV16.Template
             // désormais chez l'hébergeur — le modifier d'ici posterait un doublon.
             if (IsRemote)
             {
-                var remote = await BotRemoteApi.SetProductStatus(RemoteUrl, RemoteKey, productKey, state);
-                SakuraMessageBox.Show(remote.Success ? "Status updated." : $"Failed: {remote.Error}", "Bot Manager",
-                    MessageBoxButtons.OK, remote.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+                var remote = await BotRemoteApi.SetProductStatus(RemoteUrl, RemoteAuth, productKey, state);
+                Report(remote.Success, "Status updated.", remote.Error);
                 return;
             }
 
+            EnsureConnected(out var token, out var guildId);
             var storeData = TryReadLocalStore();
             if (storeData?["statusMessage"] is JObject sm && sm["channelId"] != null && sm["messageId"] != null)
             {
@@ -706,7 +809,7 @@ namespace PlantillaChanchoV16.Template
         {
             if (IsRemote)
             {
-                var result = await BotRemoteApi.Store(RemoteUrl, RemoteKey);
+                var result = await BotRemoteApi.Store(RemoteUrl, RemoteAuth);
                 return result.Success ? result.Data?["store"] as JObject : null;
             }
             return TryReadLocalStore();

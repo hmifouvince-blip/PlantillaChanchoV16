@@ -2,9 +2,30 @@
 // ticket dropdown, and the status page. Descriptions reused as-is from
 // Products/ProductManager.cs (the C# app) to stay consistent with what's
 // already shown inside PaiPai itself.
+//
+// Champs OPTIONNELS de mise en forme (utils/embeds.js les omet proprement
+// s'ils sont absents -> rien ne casse tant qu'ils ne sont pas remplis) :
+//   prices   : [{ label: "1 mois", price: "29 €" }, ...]  -> section « Tarifs »
+//   delivery : "Instantanée dans le ticket"                -> champ « Livraison »
+//   website  : "https://..."                               -> bouton « Site web »
+//   note     : phrase d'avertissement affichee en gras
+//   faq      : [{ q: "...", a: "..." }]                    -> un champ par question
+//
+// ⚠️ Les tarifs sont volontairement VIDES : ils s'affichent publiquement sur
+// le serveur Discord, donc ils doivent venir de toi, pas d'une valeur
+// d'exemple qui serait fausse. Remplis `prices` puis relance /post-products.
 const path = require("node:path");
 
 const ASSETS = path.join(__dirname, "..", "assets");
+
+// FAQ commune a tous les produits : le processus d'achat est identique
+// partout (paiement gere a la main dans le ticket, cf. README).
+const COMMON_FAQ = [
+  {
+    q: "Comment acheter ?",
+    a: "Clique sur **Acheter** ci-dessous : un ticket privé s'ouvre avec le Staff, qui te guide jusqu'à la livraison.",
+  },
+];
 
 module.exports = [
   {
@@ -24,6 +45,10 @@ module.exports = [
     imagePath: path.join(ASSETS, "spoofer.png"),
     imageAttachmentName: "woofer.png",
     defaultStatus: "online",
+    prices: [],
+    delivery: null,
+    website: null,
+    faq: COMMON_FAQ,
   },
   {
     key: "valorant",
@@ -38,6 +63,10 @@ module.exports = [
     imagePath: path.join(ASSETS, "valorant.jpg"),
     imageAttachmentName: "valorant.jpg",
     defaultStatus: "online",
+    prices: [],
+    delivery: null,
+    website: null,
+    faq: COMMON_FAQ,
   },
   {
     key: "roblox",
@@ -52,6 +81,10 @@ module.exports = [
     imagePath: path.join(ASSETS, "roblox.jpg"),
     imageAttachmentName: "roblox.jpg",
     defaultStatus: "online",
+    prices: [],
+    delivery: null,
+    website: null,
+    faq: COMMON_FAQ,
   },
   {
     key: "windowspai",
@@ -65,5 +98,9 @@ module.exports = [
     imagePath: path.join(ASSETS, "logo.png"),
     imageAttachmentName: "windowspai.png",
     defaultStatus: "online",
+    prices: [],
+    delivery: null,
+    website: null,
+    faq: COMMON_FAQ,
   },
 ];

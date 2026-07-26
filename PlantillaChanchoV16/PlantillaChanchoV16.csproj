@@ -41,14 +41,14 @@
 		<AssemblyTitle>PaiPai</AssemblyTitle>
 		<Product>PaiPai</Product>
 		<Company>PaiPai</Company>
-		<Version>3.8.0.0</Version>
-		<AssemblyVersion>3.8.0.0</AssemblyVersion>
+		<Version>3.9.0.0</Version>
+		<AssemblyVersion>3.9.0.0</AssemblyVersion>
 		<!-- Sans ça, le SDK ajoute automatiquement le hash du commit Git à la "Version du
 		     produit" (ex: "3.6.0.0+d5c4d06...") -> a l'air d'un build de dev bricolé plutôt
 		     que d'un vrai numéro de version, pas pro si l'utilisateur regarde les propriétés
 		     du fichier. -->
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-		<FileVersion>3.8.0.0</FileVersion>
+		<FileVersion>3.9.0.0</FileVersion>
 
 		<!-- GC "workstation" non-concurrent : empreinte mémoire plus faible. -->
 		<ServerGarbageCollection>false</ServerGarbageCollection>

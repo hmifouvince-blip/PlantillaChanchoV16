@@ -3,8 +3,10 @@ using PlantillaChanchoV16.Utilities;
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace PlantillaChanchoV16.Template
@@ -194,8 +196,8 @@ namespace PlantillaChanchoV16.Template
             _remoteUrl.Text = Result.RemoteUrl ?? "";
 
             y += 88;
-            MakeFieldLabel("Control key — must match CONTROL_KEY in the bot's .env", pad, y);
-            _controlKey = MakeTextBox("Shared secret", new Point(pad, y + 20), new Size(iconFieldW, 44), password: true);
+            MakeFieldLabel("Control key — optional, or use \"Link Discord\" instead", pad, y);
+            _controlKey = MakeTextBox("CONTROL_KEY from the bot's .env", new Point(pad, y + 20), new Size(iconFieldW, 44), password: true);
             _controlKey.Text = existing != null ? BotProfileStore.Decrypt(existing.EncryptedControlKeyBase64) : "";
             _toggleControlKey = MakeIconButton(BotIcon.Kind.Eye, new Point(_controlKey.Right + 10, y + 20));
             _toggleControlKey.Click += (s, e) =>
@@ -210,20 +212,32 @@ namespace PlantillaChanchoV16.Template
             ok.Location = new Point(Width - pad - ok.Width, buttonsY);
             ok.Click += (s, e) =>
             {
-                if (string.IsNullOrWhiteSpace(_name.Text) || string.IsNullOrWhiteSpace(_token.Text) || string.IsNullOrWhiteSpace(_guildId.Text))
-                {
-                    SakuraMessageBox.Show("Name, token and Guild ID are required.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-                // URL sans clé (ou l'inverse) = mode distant à moitié configuré :
-                // l'API refuserait chaque appel avec un 401 opaque. On bloque ici
-                // plutôt que de laisser l'utilisateur croire que son bot est
-                // injoignable.
                 bool hasUrl = !string.IsNullOrWhiteSpace(_remoteUrl.Text);
                 bool hasKey = !string.IsNullOrWhiteSpace(_controlKey.Text);
-                if (hasUrl != hasKey)
+
+                if (string.IsNullOrWhiteSpace(_name.Text))
                 {
-                    SakuraMessageBox.Show("Control URL and control key go together — fill both, or leave both empty.",
+                    SakuraMessageBox.Show("Name is required.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Token + Guild ID ne sont exiges QUE sans URL de controle : avec
+                // une URL, tout passe par le bot lui-meme. C'est ce qui permet a
+                // un membre de l'equipe d'utiliser le Bot Manager sans jamais
+                // detenir le token du bot — il se contentera de « Link Discord ».
+                if (!hasUrl && (string.IsNullOrWhiteSpace(_token.Text) || string.IsNullOrWhiteSpace(_guildId.Text)))
+                {
+                    SakuraMessageBox.Show(
+                        "Without a control URL, the bot token and Guild ID are required.\n" +
+                        "For a hosted bot, fill the control URL instead and use \"Link Discord\".",
+                        "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Une cle sans URL ne sert a rien : il n'y a personne a appeler.
+                if (hasKey && !hasUrl)
+                {
+                    SakuraMessageBox.Show("A control key needs a control URL to go with it.",
                         "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -326,6 +340,220 @@ namespace PlantillaChanchoV16.Template
             cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
             AcceptButton = ok;
+            CancelButton = cancel;
+            this.MouseDown += Drag;
+        }
+    }
+
+    // ---- Lier un compte Discord (commande /link cote bot) ----
+    // Le membre tape /link dans Discord, obtient un code court, le colle ici.
+    // L'echange se fait DANS le dialogue : c'est le seul moment ou l'on peut
+    // afficher l'erreur exacte renvoyee par le bot ("role manquant", "code
+    // expire"...) juste sous le champ concerne, plutot qu'un echec opaque
+    // apres fermeture.
+    internal class BotLinkDialog : SakuraDialogBase
+    {
+        private readonly Guna2TextBox _url, _code;
+        private readonly Guna2HtmlLabel _feedback;
+        private readonly Guna2Button _linkBtn;
+
+        public string Token { get; private set; } = "";
+        public string LinkedTag { get; private set; } = "";
+        public string Url { get; private set; } = "";
+
+        public BotLinkDialog(string? existingUrl) : base(500, 470)
+        {
+            int pad = 30;
+            int fieldW = Width - pad * 2;
+            MakeWordmarkAndTitle("Link Discord", pad);
+
+            var intro = new Guna2HtmlLabel
+            {
+                Parent = this,
+                Text = "In Discord, type <b>/link</b> and paste the code below.<br/>"
+                     + "Requires the <b>PaiPai</b> or <b>PeiPei</b> role.",
+                ForeColor = Color.FromArgb(180, 255, 255, 255),
+                Font = new Font("Inter Medium", 9.5f),
+                AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false,
+                Location = new Point(pad, 88),
+            };
+
+            int y = 132;
+            MakeFieldLabel("Control URL — the hosted bot's address", pad, y);
+            _url = MakeTextBox("e.g. 51.79.44.111:9697", new Point(pad, y + 20), new Size(fieldW, 44));
+            _url.Text = existingUrl ?? "";
+
+            y += 88;
+            MakeFieldLabel("Link code", pad, y);
+            _code = MakeTextBox("8 characters", new Point(pad, y + 20), new Size(fieldW, 44));
+            _code.Font = new Font("Consolas", 13f);
+            _code.CharacterCasing = CharacterCasing.Upper;
+
+            y += 80;
+            _feedback = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "", ForeColor = Color.FromArgb(255, 130, 120),
+                Font = new Font("Inter Medium", 9f), AutoSize = false,
+                Size = new Size(fieldW, 40), BackColor = Color.Transparent,
+                IsSelectionEnabled = false, Location = new Point(pad, y),
+            };
+
+            int buttonsY = y + 52;
+            _linkBtn = MakeButton("Link", true);
+            _linkBtn.Location = new Point(Width - pad - _linkBtn.Width, buttonsY);
+            _linkBtn.Click += async (s, e) => await TryLinkAsync();
+
+            var cancel = MakeButton("Cancel", false, 100);
+            cancel.Location = new Point(_linkBtn.Left - cancel.Width - 10, buttonsY);
+            cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+
+            AcceptButton = _linkBtn;
+            CancelButton = cancel;
+            this.MouseDown += Drag;
+        }
+
+        private async Task TryLinkAsync()
+        {
+            string url = _url.Text.Trim();
+            string code = _code.Text.Trim();
+
+            if (url.Length == 0 || code.Length == 0)
+            {
+                Say("Control URL and code are both required.", error: true);
+                return;
+            }
+
+            _linkBtn.Enabled = false;
+            Say("Contacting the bot…", error: false);
+
+            var result = await BotRemoteApi.RedeemLink(url, code);
+
+            if (IsDisposed) return;
+            _linkBtn.Enabled = true;
+
+            if (!result.Success)
+            {
+                Say(result.Error ?? "Link failed.", error: true);
+                return;
+            }
+
+            Token = result.Data?["token"]?.ToString() ?? "";
+            LinkedTag = result.Data?["tag"]?.ToString() ?? "";
+            Url = url;
+
+            if (Token.Length == 0)
+            {
+                Say("The bot answered without a token — update the bot's code.", error: true);
+                return;
+            }
+
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        private void Say(string text, bool error)
+        {
+            _feedback.ForeColor = error ? Color.FromArgb(255, 130, 120) : Color.FromArgb(180, 255, 255, 255);
+            _feedback.Text = text;
+        }
+    }
+
+    // ---- Publier une mise a jour (changelog structure) ----
+    // Le corps est un texte libre ou chaque ligne prefixee par +, - ou !
+    // ressort coloree dans Discord (bloc ```diff cote bot). On ne construit
+    // AUCUN embed ici : la mise en page vit dans utils/embeds.js, sinon les
+    // deux divergeraient des la premiere retouche visuelle.
+    internal class BotUpdateDialog : SakuraDialogBase
+    {
+        private readonly Guna2TextBox _title, _version, _changelog, _note;
+        private readonly Guna2ComboBox _product;
+        private readonly Guna2CustomCheckBox _ping;
+        private readonly string[] _productKeys;
+
+        public string TitleValue => _title.Text.Trim();
+        public string VersionValue => _version.Text.Trim();
+        public string ChangelogValue => _changelog.Text.Trim();
+        public string NoteValue => _note.Text.Trim();
+        public bool PingValue => _ping.Checked;
+
+        // index 0 = "Aucun produit" -> renvoie null, le bot omet alors la
+        // vignette et le champ Produit de l'embed.
+        public string? ProductKey =>
+            _product.SelectedIndex <= 0 ? null : _productKeys[_product.SelectedIndex - 1];
+
+        public BotUpdateDialog((string Key, string Name)[] products) : base(560, 690)
+        {
+            _productKeys = products.Select(p => p.Key).ToArray();
+
+            int pad = 30;
+            int fieldW = Width - pad * 2;
+            int halfW = (fieldW - 12) / 2;
+            MakeWordmarkAndTitle("Post update", pad);
+
+            int y = 94;
+            MakeFieldLabel("Title", pad, y);
+            _title = MakeTextBox("e.g. Woofer", new Point(pad, y + 20), new Size(halfW, 44));
+            MakeFieldLabel("Version (optional)", pad + halfW + 12, y);
+            _version = MakeTextBox("e.g. v3.9", new Point(pad + halfW + 12, y + 20), new Size(halfW, 44));
+
+            y += 86;
+            MakeFieldLabel("Product (optional)", pad, y);
+            _product = new Guna2ComboBox
+            {
+                Parent = this, Location = new Point(pad, y + 20), Size = new Size(fieldW, 44),
+                Font = new Font("Inter Medium", 10f), BorderRadius = 10,
+            };
+            GunaTheme.StyleCombo(_product);
+            _product.Items.Add("— No product —");
+            foreach (var p in products) _product.Items.Add(p.Name);
+            _product.SelectedIndex = 0;
+
+            y += 86;
+            MakeFieldLabel("Changes — one per line:   + added    - removed    ! fixed", pad, y);
+            _changelog = new Guna2TextBox
+            {
+                Parent = this, Location = new Point(pad, y + 20), Size = new Size(fieldW, 170),
+                Multiline = true, BorderRadius = 10, FillColor = Colors.scColor, BorderColor = Colors.scColor,
+                ForeColor = Color.White, Font = new Font("Consolas", 10f), Animated = true,
+                ScrollBars = ScrollBars.Vertical, AcceptsReturn = true,
+                PlaceholderText = "+ Added Windows 11 24H2 support",
+            };
+            _changelog.FocusedState.BorderColor = Colors.mainColor;
+
+            y += 212;
+            MakeFieldLabel("Warning note (optional)", pad, y);
+            _note = MakeTextBox("Shown under the changelog", new Point(pad, y + 20), new Size(fieldW, 44));
+
+            y += 82;
+            _ping = new Guna2CustomCheckBox
+            {
+                Parent = this, Size = new Size(20, 20), Location = new Point(pad, y), Animated = true,
+            };
+            _ping.CheckedState.FillColor = Colors.mainColor;
+            _ping.CheckedState.BorderColor = Colors.mainColor;
+            _ping.UncheckedState.FillColor = Colors.scColor;
+            _ping.UncheckedState.BorderColor = Colors.scColor;
+            var pingLabel = MakeFieldLabel("Mention @everyone", pad + 28, y + 1);
+            pingLabel.Cursor = Cursors.Hand;
+            pingLabel.Click += (s, e) => _ping.Checked = !_ping.Checked;
+
+            int buttonsY = y + 44;
+            var ok = MakeButton("Post", true);
+            ok.Location = new Point(Width - pad - ok.Width, buttonsY);
+            ok.Click += (s, e) =>
+            {
+                if (TitleValue.Length == 0 || ChangelogValue.Length == 0)
+                {
+                    SakuraMessageBox.Show("Title and changes are required.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                DialogResult = DialogResult.OK;
+                Close();
+            };
+            var cancel = MakeButton("Cancel", false, 100);
+            cancel.Location = new Point(ok.Left - cancel.Width - 10, buttonsY);
+            cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+
             CancelButton = cancel;
             this.MouseDown += Drag;
         }

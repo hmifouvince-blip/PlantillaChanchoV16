@@ -134,12 +134,16 @@ localement.
 
 | Route | Effet |
 |---|---|
-| `GET /ping` | Seule route sans clé — pour les robots de keep-alive. Ne divulgue rien. |
+| `GET /ping` | Sans authentification — pour les robots de keep-alive. Ne divulgue rien. |
+| `POST /link/redeem` | Sans authentification — échange un code `/link` contre un jeton (voir 6.5) |
+| `GET /me` | Qui suis-je : clé de contrôle, ou compte Discord lié + rôles |
 | `GET /health` | En ligne ou non, uptime, serveur, membres, latence |
 | `GET /logs?since=N` | Les lignes de console apparues depuis la ligne N |
 | `POST /restart` | Arrête le process ; l'hébergeur le relance |
 | `GET /store` | Contenu de `data/store.json` (tickets, statuts) |
 | `POST /product-status` | Change l'état d'un produit sur la page #statut |
+| `POST /announce` | Publie une annonce dans #announcements |
+| `POST /update` | Publie un changelog dans #updates |
 
 ⚠️ Sur un hébergeur qui ne fournit qu'une adresse `http://` (pas de
 `https://`), la clé de contrôle circule **en clair** sur le réseau. Le
@@ -148,6 +152,42 @@ qui intercepterait la clé pourrait faire, c'est redémarrer le bot ou
 changer un statut. Utilise une clé longue et aléatoire, et change-la si tu
 la soupçonnes exposée.
 
+### 6.5 Donner l'accès à l'équipe sans partager de secret
+
+La clé de contrôle est un secret d'**infrastructure** : la donner à quelqu'un,
+c'est lui donner tout le pouvoir, et la retirer à une seule personne oblige à
+la changer pour tout le monde. Pour l'équipe, on utilise donc la **liaison
+Discord** :
+
+1. Donne le rôle **PaiPai** ou **PeiPei** à la personne dans Discord.
+2. Elle tape `/link` dans le serveur → le bot lui répond en privé avec un code
+   de 8 caractères, valable 10 minutes et utilisable une seule fois.
+3. Dans PaiPai → **Bot Manager** → **Link Discord** → elle colle l'URL de
+   contrôle et le code.
+
+Elle peut alors piloter le bot **sans jamais détenir le token du bot ni la clé
+de contrôle**. Pour lui retirer l'accès : enlève-lui simplement le rôle — le
+bot revalide les rôles à chaque publication et révoque le jeton sur-le-champ.
+Elle peut aussi se déconnecter elle-même avec `/unlink`.
+
+Les rôles acceptés se règlent dans `config/branding.js` (`adminRoleNames`).
+
+## Personnaliser les publications
+
+Toute la mise en page (annonces, changelogs, fiches produit, page de statut)
+vit dans **`utils/embeds.js`** — un seul fichier à toucher pour changer le
+rendu partout, que la publication vienne d'une commande slash ou de
+l'application PaiPai.
+
+- **Changelog** : chaque ligne préfixée par `+` (ajout), `-` (retrait) ou
+  `!` (correction) ressort colorée dans Discord. Sans préfixe, la ligne reste
+  neutre.
+- **Tarifs, livraison, FAQ, site web** d'un produit : champs optionnels dans
+  `config/products.js`. Ils sont **vides par défaut** (ils s'affichent
+  publiquement, ils doivent donc venir de toi) et la section correspondante
+  est simplement omise tant qu'ils ne sont pas remplis. Après modification,
+  relance `/post-products`.
+
 ## Commandes disponibles (réservées au Staff / Administrateur)
 
 | Commande | Rôle requis | Effet |
@@ -155,8 +195,10 @@ la soupçonnes exposée.
 | `/setup-server` | Administrateur | Crée/complète toute la structure du serveur |
 | `/post-products` | Gérer le serveur | Reposte la présentation des produits |
 | `/status-set produit: état:` | Gérer le serveur | Met à jour la page #statut |
-| `/update-post titre: description:` | Gérer le serveur | Publie une update dans #updates |
+| `/update-post title: changelog: [product:] [version:] [note:]` | Gérer le serveur | Publie une update dans #updates |
 | `/announce titre: message: ping:` | Gérer le serveur | Publie une annonce dans #annonces |
+| `/link` | Rôle PaiPai / PeiPei | Génère un code pour piloter le bot depuis PaiPai |
+| `/unlink` | Rôle PaiPai / PeiPei | Révoque tous ses accès PaiPai |
 
 ## Fonctionnement automatique (aucune commande nécessaire)
 

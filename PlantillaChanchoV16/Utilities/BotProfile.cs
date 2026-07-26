@@ -28,5 +28,17 @@ namespace PlantillaChanchoV16.Utilities
         // designe alors qu'une copie locale du code, pas le bot qui tourne.
         public string? RemoteUrl { get; set; }
         public string EncryptedControlKeyBase64 { get; set; } = "";
+
+        // Liaison Discord (commande /link cote bot) : alternative a la cle de
+        // controle pour les membres de l'equipe. La cle est un secret
+        // d'infrastructure qu'on ne peut pas distribuer (la donner = tout
+        // donner, la retirer a une personne = la changer pour tout le monde) ;
+        // ce jeton-ci est personnel, adosse a un role Discord, et se revoque
+        // en retirant simplement le role.
+        public string EncryptedSessionTokenBase64 { get; set; } = "";
+
+        // Compte Discord lie, affiche tel quel dans le Bot Manager. Purement
+        // informatif : la source de verite reste le jeton, revalide par le bot.
+        public string? LinkedDiscordTag { get; set; }
     }
 }
