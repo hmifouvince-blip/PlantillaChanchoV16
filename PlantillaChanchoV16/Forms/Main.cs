@@ -147,6 +147,12 @@ namespace PlantillaChanchoV16
             // rame). Après ce préchauffage, toutes les ouvertures sont instantanées.
             this.Shown += (s, e) => WarmProductDetailsCache();
 
+            // Double tampon sur TOUT l'arbre, une fois la fenêtre construite : la nav,
+            // le carrousel et la grille superposent des panneaux transparents peints à
+            // la main (dégradés, halos, voiles). Sans ça, chaque survol ou défilement
+            // repeint couche par couche -> le scintillement et les à-coups ressentis.
+            this.Shown += (s, e) => Utilities.UiStyle.EnableDoubleBuffer(this);
+
             // Met les animations en pause dès que PaiPai n'est pas au premier plan (ou minimisé)
             // -> zéro conso quand tu joues.
             this.Activated += (s, e) => Utilities.AnimationHub.Focused = true;

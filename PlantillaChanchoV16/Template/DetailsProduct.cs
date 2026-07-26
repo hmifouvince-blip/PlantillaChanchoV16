@@ -946,21 +946,21 @@ namespace PlantillaChanchoV16
                 containerTab2.Visible = false;
                 containerTab3.Visible = false;
                 containerTab1.Visible = true;
-                //transitionPanels.Show(containerTab1);
+                RelayoutRightArea();
             });
             btnRequirements = CreateButtonsTab(1, new Point(0, 2), "Requirements", () =>
             {
                 containerTab1.Visible = false;
                 containerTab3.Visible = false;
                 containerTab2.Visible = true;
-                //transitionPanels.Show(containerTab2);
+                RelayoutRightArea();
             });
             btnFeatures = CreateButtonsTab(2, new Point(0, 0), "Features", () =>
             {
                 containerTab1.Visible = false;
                 containerTab2.Visible = false;
                 containerTab3.Visible = true;
-                //transitionPanels.Show(containerTab3);
+                RelayoutRightArea();
             });
             containerIndicatorPanel = new Guna2Panel
             {
@@ -1118,12 +1118,20 @@ namespace PlantillaChanchoV16
 
 
 
+            // PAS de Dock.Bottom ici : containerRightArea a une hauteur FIGÉE sur la
+            // colonne média de gauche, alors que l'onglet About est en AutoSize. Avec
+            // une description longue (Spoofer et ses 6 puces), le contenu débordait
+            // sous le bouton ancré en bas -> LAUNCH se retrouvait rogné hors du
+            // viewport, donc incliquable. Il est désormais positionné explicitement
+            // sous le contenu réel par RelayoutRightArea(), rappelé à chaque
+            // changement d'onglet (les trois onglets n'ont pas la même hauteur).
             containerActivateProduct = new Guna2Panel
             {
-                Dock = DockStyle.Bottom,
                 BorderColor = Color.Red,
                 BorderThickness = 0,
                 AutoSize = true,
+                BackColor = Colors.bgColor,
+                UseTransparentBackground = false,
             };
 
             int heightItemsActivate = 40;
@@ -1206,6 +1214,14 @@ namespace PlantillaChanchoV16
             containerActivateProduct.Controls.Add(btnActivateProduct);
             containerActivateProduct.Controls.Add(lbRequestLicense);
 
+            // Recalé APRÈS l'ajout : un Guna2HtmlLabel en AutoSize ne connaît sa
+            // largeur réelle qu'une fois rattaché à un parent. Calculée avant, la
+            // position ci-dessus utilisait une largeur encore nulle -> le lien
+            // partait à gauche au lieu d'être aligné à droite du bouton.
+            lbRequestLicense.Location = new Point(
+                Math.Max(0, btnActivateProduct.Right - lbRequestLicense.Width),
+                btnActivateProduct.Bottom + 10);
+
 
             containerTab1.Controls.Add(descriptionProduct);
             //containerTab1.Controls.Add(textForLink);
@@ -1269,8 +1285,51 @@ namespace PlantillaChanchoV16
 
             this.Height = containerMain.Height;
 
+            RelayoutRightArea();
+
+            // Une fois l'arbre complet : sans double tampon, cette fiche (des dizaines
+            // de panneaux imbriques) scintille et saccade au moindre survol ou
+            // changement d'onglet.
+            Utilities.UiStyle.EnableDoubleBuffer(this);
 
             #endregion rightArea
+        }
+
+        // Replace le bloc LAUNCH sous le contenu RÉELLEMENT visible et redimensionne
+        // la colonne de droite en conséquence.
+        //
+        // Indispensable parce que les trois onglets ont des hauteurs très
+        // différentes (About est en AutoSize et suit la longueur de la description,
+        // Requirements/Features ont une hauteur propre) : une position calculée une
+        // seule fois à la construction serait fausse dès le premier changement
+        // d'onglet. Sans ça, le bouton finissait sous la ligne de flottaison et le
+        // produit devenait impossible à lancer.
+        private void RelayoutRightArea()
+        {
+            if (containerRightArea == null || containerActivateProduct == null) return;
+
+            int contentBottom = containerTabBtnProduct?.Bottom ?? 0;
+            foreach (var tab in new[] { containerTab1, containerTab2, containerTab3 })
+            {
+                if (tab != null && tab.Visible) contentBottom = Math.Max(contentBottom, tab.Bottom);
+            }
+
+            containerActivateProduct.Width = containerRightArea.Width;
+            containerActivateProduct.Location = new Point(0, contentBottom + 24);
+            containerActivateProduct.BringToFront();
+
+            // La colonne de droite ne peut jamais être plus courte que la colonne
+            // média de gauche (sinon le fond se coupe au milieu de la fiche).
+            // On lit containerSmallImage.Bottom plutôt que de recalculer la somme :
+            // separationSmallImages est une variable LOCALE à la construction.
+            int mediaHeight = containerSmallImage?.Bottom ?? containerLeftArea?.Height ?? 0;
+            containerRightArea.Height = Math.Max(mediaHeight, containerActivateProduct.Bottom + 16);
+
+            // Le conteneur parent doit suivre, sinon la zone agrandie reste hors
+            // du viewport défilable et on n'atteint toujours pas le bouton.
+            int needed = containerRightArea.Bottom + 24;
+            if (containerMain != null && containerMain.Height < needed) containerMain.Height = needed;
+            if (this.Height < needed) this.Height = needed;
         }
 
         private string AddSpaceBetweenLetters(string text)

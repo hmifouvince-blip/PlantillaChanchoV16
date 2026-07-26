@@ -190,6 +190,10 @@ public class AddProduct
 
             target.Controls.Add(products[i]);
         }
+
+        // Les cartes empilent image + voile + libelles : sans double tampon, le
+        // defilement de la grille scintille et accroche a chaque survol.
+        UiStyle.EnableDoubleBuffer(target);
     }
 
     public void ShowView(string key)

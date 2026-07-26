@@ -11,6 +11,42 @@ namespace PlantillaChanchoV16.Utilities
     // structure de donnees n'est touchee. L'accent reste la couleur du theme (sakura).
     internal static class UiStyle
     {
+        // Active le double tampon sur un controle ET toute sa descendance.
+        //
+        // Panel/Form exposent DoubleBuffered en PROTECTED : impossible de le poser de
+        // l'exterieur autrement que par reflexion. Sans lui, chaque survol, defilement
+        // ou changement d'onglet repeint panneau par panneau -> le scintillement et
+        // les a-coups ressentis dans les fiches produit, qui empilent des dizaines de
+        // panneaux imbriques.
+        //
+        // A appeler UNE FOIS, apres avoir rempli l'arbre de controles.
+        public static void EnableDoubleBuffer(Control root)
+        {
+            if (root == null) return;
+
+            var prop = typeof(Control).GetProperty("DoubleBuffered",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var setStyle = typeof(Control).GetMethod("SetStyle",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+            void Apply(Control c)
+            {
+                try
+                {
+                    prop?.SetValue(c, true, null);
+                    setStyle?.Invoke(c, new object[]
+                    {
+                        ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true
+                    });
+                }
+                catch { /* un controle tiers peut refuser : jamais bloquant, c'est du confort */ }
+
+                foreach (Control child in c.Controls) Apply(child);
+            }
+
+            Apply(root);
+        }
+
         // Fond de la zone centrale : degrade vertical sombre + halo d'accent diffus en haut.
         // Donne de la profondeur au lieu d'un aplat noir.
         public static void AttachContentBackdrop(Control c)
