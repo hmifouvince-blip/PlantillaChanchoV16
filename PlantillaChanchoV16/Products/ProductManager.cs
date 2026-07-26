@@ -11,26 +11,26 @@ namespace PlantillaChanchoV16.Products
     {
         Utils utils = new Utils();
         Images images = new Images();
-        private Dictionary<string, DetailsProduct> cachedForms = new Dictionary<string, DetailsProduct>();
+        private Dictionary<string, Template.ProductPage> cachedForms = new Dictionary<string, Template.ProductPage>();
 
-        public async Task<DetailsProduct> GetGameDetails(Form form, string gameName)
+        public async Task<Template.ProductPage> GetGameDetails(Form form, string gameName)
         {
             if (cachedForms.TryGetValue(gameName, out var cachedForm))
             {
                 return cachedForm;
             }
 
-            DetailsProduct newForm = await CreateGameDetails(form, gameName);
+            Template.ProductPage newForm = await CreateGameDetails(form, gameName);
             cachedForms[gameName] = newForm;
             return newForm;
         }
 
-        private async Task<DetailsProduct> CreateGameDetails(Form form, string gameName)
+        private async Task<Template.ProductPage> CreateGameDetails(Form form, string gameName)
         {
             switch (gameName.ToLower())
             {
                 case "warzone":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "1BASIC",
                         logoRounded: false,
                         productName: "Call Of Duty:\nWarzone 2.0",
@@ -50,7 +50,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "warzone")
                         );
                 case "anydesk":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "Spoofer",
                         logoRounded: false,
                         productName: "Spoofer",
@@ -70,7 +70,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "anydesk")
                         );
                 case "csgo":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "1BASIC",
                         logoRounded: false,
                         productName: "Counter-Strike:\nGlobal Offensive",
@@ -90,7 +90,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "CS:GO")
                     );
                 case "gta5":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "Lgta5",
                         logoRounded: false,
                         productName: "Rockstar: Grand\nTheft Auto V",
@@ -110,7 +110,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "GTA 5")
                     );
                 case "minecraft":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "Lminecraft",
                         productName: "Mojang:\nMinecraft",
                         productDescription: "Unleash creativity and adventure in Minecraft with innovative tools, visual enhancements, and custom features for all your building and survival needs.",
@@ -130,7 +130,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "minecraft")
                         );
                 case "rd2":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "1BASIC",
                         productName: "Red Dead\nRedemption 2",
                         productDescription: "Immerse yourself in RD2 with enhanced precision tools, realistic environment manipulation, and advanced gameplay customization.",
@@ -150,7 +150,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "rd2")
                         );
                 case "roblox":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "Roblox",
                         productName: "Roblox Co:\nRoblox",
                         productDescription: "A powerful Roblox toolkit for creators and explorers. Run advanced scripts, unlock visual enhancements and enjoy a smooth, stable and undetected experience across all your favorite games.",
@@ -170,7 +170,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "roblox")
                     );
                 case "valorant":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "Valorant",
                         logoRounded: true,
                         productName: "Riot Games:\nValorant",
@@ -190,7 +190,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "valorant")
                     );
                 case "freefire":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "Lfreefire",
                         productName: "Garena Online:\nFree Fire",
                         productDescription: "Master Garena Free Fire with enhanced precision, unmatched speed, and advanced tools to elevate your gameplay.",
@@ -210,7 +210,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "freefire")
                         );
                 case "dota2":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "2BASIC",
                         productName: "Valve Corp:\nDota 2",
                         productDescription: "Take your MOBA gameplay to the next level with advanced vision control, precision enhancements, and strategic tools for Dota 2.",
@@ -230,7 +230,7 @@ namespace PlantillaChanchoV16.Products
                         openProduct: () => LoadGame(form, "dota2")
                         );
                 case "tf2":
-                    return new DetailsProduct(
+                    return new Template.ProductPage(
                         __subscriptionName: "1BASIC",
                         productName: "Valve:\nTeam Fortress 2",
                         productDescription: "Enhance your gameplay in TF2 with advanced aim assistance, customizable loadouts, and tactical visual enhancements.",

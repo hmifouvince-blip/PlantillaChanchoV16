@@ -1,4 +1,4 @@
-using CuoreUI;
+﻿using CuoreUI;
 using CuoreUI.Components;
 using Guna.UI2.WinForms;
 using PlantillaChanchoV16.Products;
@@ -67,7 +67,7 @@ namespace PlantillaChanchoV16
         private Guna2HtmlLabel _detailsHeader;
 
         private AddProduct productManager;
-        private DetailsProduct detailsForm;
+        private Template.ProductPage detailsForm;
         private ProductManager gameDetailsFactory = new ProductManager();
         private Guna2Panel _contentForDetailsForm;
     
@@ -2412,7 +2412,7 @@ namespace PlantillaChanchoV16
                 loader.Show(this.Bounds, "Loading product...");
                 try
                 {
-                    DetailsProduct detailsForm = await gameDetailsFactory.GetGameDetails(this, gameName);
+                    Template.ProductPage detailsForm = await gameDetailsFactory.GetGameDetails(this, gameName);
                     LoadDetailsFormInContainer(detailsForm);
                     detailsForm.BringToFront();
                     _contentForDetailsForm.BringToFront();
