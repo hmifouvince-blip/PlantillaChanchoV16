@@ -145,12 +145,12 @@ namespace PlantillaChanchoV16.Template
     // ---- Ajouter/Modifier un profil de bot ----
     internal class BotProfileDialog : SakuraDialogBase
     {
-        private readonly Guna2TextBox _name, _token, _guildId, _folder;
-        private readonly BotIcon _togglePassword;
+        private readonly Guna2TextBox _name, _token, _guildId, _folder, _remoteUrl, _controlKey;
+        private readonly BotIcon _togglePassword, _toggleControlKey;
 
         public BotProfile Result { get; private set; }
 
-        public BotProfileDialog(BotProfile? existing) : base(480, 520)
+        public BotProfileDialog(BotProfile? existing) : base(480, 700)
         {
             Result = existing ?? new BotProfile();
             int pad = 30;
@@ -188,7 +188,24 @@ namespace PlantillaChanchoV16.Template
             var browseFolder = MakeIconButton(BotIcon.Kind.Folder, new Point(_folder.Right + 10, y + 20));
             browseFolder.Click += (s, e) => PickFolderAsync();
 
-            int buttonsY = y + 20 + 44 + 28; // sous le dernier champ (Folder), jamais chevauché
+            y += 88;
+            MakeFieldLabel("Control URL — for a bot hosted 24/7 (e.g. 1.2.3.4:8080)", pad, y);
+            _remoteUrl = MakeTextBox("Empty = bot runs locally only", new Point(pad, y + 20), new Size(fieldW, 44));
+            _remoteUrl.Text = Result.RemoteUrl ?? "";
+
+            y += 88;
+            MakeFieldLabel("Control key — must match CONTROL_KEY in the bot's .env", pad, y);
+            _controlKey = MakeTextBox("Shared secret", new Point(pad, y + 20), new Size(iconFieldW, 44), password: true);
+            _controlKey.Text = existing != null ? BotProfileStore.Decrypt(existing.EncryptedControlKeyBase64) : "";
+            _toggleControlKey = MakeIconButton(BotIcon.Kind.Eye, new Point(_controlKey.Right + 10, y + 20));
+            _toggleControlKey.Click += (s, e) =>
+            {
+                _controlKey.UseSystemPasswordChar = !_controlKey.UseSystemPasswordChar;
+                _toggleControlKey.IconKind = _controlKey.UseSystemPasswordChar ? BotIcon.Kind.Eye : BotIcon.Kind.EyeOff;
+                _toggleControlKey.Invalidate();
+            };
+
+            int buttonsY = y + 20 + 44 + 28; // sous le dernier champ, jamais chevauché
             var ok = MakeButton("Save", true);
             ok.Location = new Point(Width - pad - ok.Width, buttonsY);
             ok.Click += (s, e) =>
@@ -198,10 +215,25 @@ namespace PlantillaChanchoV16.Template
                     SakuraMessageBox.Show("Name, token and Guild ID are required.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                // URL sans clé (ou l'inverse) = mode distant à moitié configuré :
+                // l'API refuserait chaque appel avec un 401 opaque. On bloque ici
+                // plutôt que de laisser l'utilisateur croire que son bot est
+                // injoignable.
+                bool hasUrl = !string.IsNullOrWhiteSpace(_remoteUrl.Text);
+                bool hasKey = !string.IsNullOrWhiteSpace(_controlKey.Text);
+                if (hasUrl != hasKey)
+                {
+                    SakuraMessageBox.Show("Control URL and control key go together — fill both, or leave both empty.",
+                        "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 Result.Name = _name.Text.Trim();
                 Result.EncryptedTokenBase64 = BotProfileStore.Encrypt(_token.Text.Trim());
                 Result.GuildId = _guildId.Text.Trim();
                 Result.LocalFolderPath = string.IsNullOrWhiteSpace(_folder.Text) ? null : _folder.Text.Trim();
+                Result.RemoteUrl = hasUrl ? _remoteUrl.Text.Trim() : null;
+                Result.EncryptedControlKeyBase64 = hasKey ? BotProfileStore.Encrypt(_controlKey.Text.Trim()) : "";
                 DialogResult = DialogResult.OK;
                 Close();
             };

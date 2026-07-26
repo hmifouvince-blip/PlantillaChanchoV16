@@ -47,6 +47,12 @@ for (const file of fs.readdirSync(eventsPath).filter((f) => f.endsWith(".js"))) 
   }
 }
 
+// Demarre AVANT le login : le detournement de console.* doit etre en place
+// pour que les lignes de demarrage (et un eventuel echec de connexion)
+// apparaissent dans la console live de PaiPai, pas seulement dans le panel de
+// l'hebergeur. Sans CONTROL_KEY, la fonction ne fait rien.
+require("./control/server").start(client);
+
 client.login(process.env.BOT_TOKEN).catch((err) => {
   console.error("❌ Connexion à Discord échouée — vérifie BOT_TOKEN dans .env.", err);
   process.exit(1);

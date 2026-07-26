@@ -20,5 +20,13 @@ namespace PlantillaChanchoV16.Utilities
 
         public string GuildId { get; set; } = "";
         public string? LocalFolderPath { get; set; }
+
+        // Bot heberge 24/7 ailleurs : URL de son API de controle
+        // (paipai-discord-bot/control/server.js) + cle secrete partagee, chiffree
+        // comme le token. Renseignes -> le Bot Manager bascule en mode distant
+        // (etat/logs/redemarrage par HTTP) et ignore LocalFolderPath, qui ne
+        // designe alors qu'une copie locale du code, pas le bot qui tourne.
+        public string? RemoteUrl { get; set; }
+        public string EncryptedControlKeyBase64 { get; set; } = "";
     }
 }

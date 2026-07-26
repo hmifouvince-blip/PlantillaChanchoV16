@@ -56,11 +56,9 @@ npm install
 Puis, à chaque fois que tu veux démarrer le bot : double-clique
 **`start.bat`** (ou `npm start` dans un terminal ouvert dans ce dossier).
 
-⚠️ **Le bot ne tourne que tant que cette fenêtre reste ouverte et que ton
-PC est allumé.** Si tu veux qu'il reste en ligne 24h/24 sans dépendre de
-ton PC, il faudra plus tard le déplacer sur un petit serveur/VPS (le code
-ne changera pas, seul l'endroit où tu lances `npm start` change) —
-dis-le-moi quand tu voudras franchir cette étape, je t'accompagne.
+⚠️ **Lancé comme ça, le bot ne tourne que tant que cette fenêtre reste
+ouverte et que ton PC est allumé.** Pour qu'il reste en ligne 24h/24 sans
+dépendre de ton PC, voir la **section 6 : hébergement 24/7**.
 
 Tu dois voir dans la fenêtre : `Connecté en tant que PaiPai#XXXX` — si tu
 vois une erreur à la place, relis le message, il explique quoi corriger
@@ -77,6 +75,78 @@ de vérification, le panneau de tickets, la présentation des produits et
 la page de statut. **Il ne touche jamais à ce qui existe déjà** — tu peux
 relancer cette commande sans risque à tout moment (par exemple après
 avoir ajouté un produit dans `config/products.js`).
+
+## 6. Hébergement 24/7 + pilotage depuis PaiPai
+
+Le bot embarque une petite **API de contrôle** (`control/server.js`) qui
+permet au Bot Manager de PaiPai de suivre son état, lire sa console et le
+redémarrer **même quand il tourne chez un hébergeur**, à l'autre bout du
+monde. Sans elle, PaiPai ne saurait piloter qu'un bot lancé sur ta propre
+machine.
+
+### 6.1 Choisir l'hébergeur
+
+Recommandé : **bot-hosting.net** — gratuit, sans carte bancaire, 24/7 sans
+mise en veille, Node.js supporté, port + IP attribués (indispensable pour
+l'API de contrôle). Alternative plus puissante mais plus technique :
+**Oracle Cloud Always Free** (vraie VM gratuite à vie, carte bancaire
+demandée pour la vérification).
+
+À éviter : les offres gratuites de Render/Railway/Fly — soit le service
+s'endort après 15 min d'inactivité (le bot passe hors ligne), soit le tier
+gratuit n'existe plus, soit le disque est effacé à chaque redéploiement
+(tu perdrais `data/store.json`, donc les tickets et la page de statut).
+
+### 6.2 Déployer
+
+1. Crée un serveur **Node.js** chez l'hébergeur.
+2. Envoie-lui le contenu de ce dossier (upload, ou `git clone` du dépôt).
+3. Commande de démarrage : `node index.js`. Installe les dépendances avec
+   `npm install` au premier lancement.
+4. Renseigne les variables d'environnement **dans le panel de
+   l'hébergeur**, jamais dans un fichier envoyé au dépôt :
+   - `BOT_TOKEN`, `GUILD_ID`, `MIN_ACCOUNT_AGE_DAYS`
+   - `CONTROL_KEY` : un secret long et aléatoire (16 caractères minimum).
+     **Sans cette variable, l'API de contrôle ne démarre pas du tout** —
+     c'est volontaire : une API de contrôle ouverte laisserait n'importe
+     qui redémarrer ton bot.
+5. Note l'**IP et le port** attribués : c'est l'adresse à donner à PaiPai.
+6. Démarre. La console doit afficher `[control] API de contrôle à l'écoute
+   sur le port XXXX.` puis `Logged in as PaiPai#XXXX`.
+
+### 6.3 Brancher PaiPai dessus
+
+Dans PaiPai → **Bot Manager** → `Edit` sur le profil du bot :
+
+- **Control URL** : `IP:PORT` de l'hébergeur (ex: `152.53.44.12:25565`)
+- **Control key** : exactement la même valeur que `CONTROL_KEY`
+
+Le volet du haut passe alors en mode distant : pastille en ligne/hors
+ligne, nom du serveur, nombre de membres, latence, uptime, console live
+rafraîchie toutes les 3 s, et bouton **Restart**. Les actions rapides
+(annonce, update, statut, tickets) continuent de fonctionner et lisent
+désormais les données **chez l'hébergeur**, plus sur ton disque.
+
+Laisse ces deux champs vides pour revenir au pilotage d'un bot lancé
+localement.
+
+### 6.4 Ce que l'API expose
+
+| Route | Effet |
+|---|---|
+| `GET /ping` | Seule route sans clé — pour les robots de keep-alive. Ne divulgue rien. |
+| `GET /health` | En ligne ou non, uptime, serveur, membres, latence |
+| `GET /logs?since=N` | Les lignes de console apparues depuis la ligne N |
+| `POST /restart` | Arrête le process ; l'hébergeur le relance |
+| `GET /store` | Contenu de `data/store.json` (tickets, statuts) |
+| `POST /product-status` | Change l'état d'un produit sur la page #statut |
+
+⚠️ Sur un hébergeur qui ne fournit qu'une adresse `http://` (pas de
+`https://`), la clé de contrôle circule **en clair** sur le réseau. Le
+token du bot, lui, ne quitte jamais l'hébergeur : le pire qu'un attaquant
+qui intercepterait la clé pourrait faire, c'est redémarrer le bot ou
+changer un statut. Utilise une clé longue et aléatoire, et change-la si tu
+la soupçonnes exposée.
 
 ## Commandes disponibles (réservées au Staff / Administrateur)
 

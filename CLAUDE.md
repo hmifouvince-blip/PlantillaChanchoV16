@@ -63,7 +63,7 @@ typo/doc), dans `PlantillaChanchoV16/PlantillaChanchoV16.csproj` :
 4. **Vérifie le résultat** avant de committer (doit afficher "PaiPai"
    partout et le bon numéro de version, sans hash Git en suffixe) :
    ```powershell
-   [System.Diagnostics.FileVersionInfo]::GetVersionInfo("PlantillaChanchoV16/bin/Debug/net7.0-windows7.0/PlantillaChanchoV16.exe")
+   [System.Diagnostics.FileVersionInfo]::GetVersionInfo("PlantillaChanchoV16/bin/Debug/net7.0-windows7.0/PaiPai.exe")
    ```
 
 5. Inclus le `.csproj` modifié dans le commit avec le reste du changement.

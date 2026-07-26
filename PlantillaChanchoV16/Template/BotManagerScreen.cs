@@ -20,8 +20,13 @@ namespace PlantillaChanchoV16.Template
     // (contrairement a la v1, chaque section utilise un curseur Y cumulatif ->
     // aucune section ne peut chevaucher la suivante par erreur de calcul).
     // Deux volets independants :
-    // - Process local (node index.js) si un dossier est renseigne pour le profil actif ;
-    // - Actions API Discord directes (marchent meme sans process local).
+    // - Etat du bot : soit process local (node index.js) si un dossier est
+    //   renseigne, soit MODE DISTANT (bot heberge 24/7 ailleurs) si le profil a
+    //   une URL de controle -> etat/logs/redemarrage via BotRemoteApi. Le mode
+    //   distant a la priorite : quand le bot tourne chez un hebergeur, un
+    //   "Start" local lancerait un SECOND bot sur le meme token, ce que Discord
+    //   refuse.
+    // - Actions API Discord directes (marchent dans les deux cas).
     internal class BotManagerScreen : Form
     {
         [DllImport("user32.dll")] private static extern bool ReleaseCapture();
@@ -46,6 +51,15 @@ namespace PlantillaChanchoV16.Template
         private Label _procStatus, _procHint;
         private Guna2TextBox _log;
         private BotProfile? _active;
+
+        // Mode distant : sondage periodique de l'API de controle du bot.
+        private System.Windows.Forms.Timer? _pollTimer;
+        private long _lastLogSeq;
+        private bool _pollBusy;
+
+        private bool IsRemote => _active != null && !string.IsNullOrWhiteSpace(_active.RemoteUrl);
+        private string RemoteUrl => _active?.RemoteUrl ?? "";
+        private string RemoteKey => _active == null ? "" : BotProfileStore.Decrypt(_active.EncryptedControlKeyBase64);
 
         public BotManagerScreen()
         {
@@ -80,7 +94,31 @@ namespace PlantillaChanchoV16.Template
             Proc.OutputReceived += line => AppendLog(line);
             Proc.Exited += () => BeginInvoke(new Action(() => { AppendLog("[process] Le bot s'est arrêté."); RefreshProcUi(); }));
 
+            // 3 s : assez reactif pour une console "live", assez espace pour ne
+            // pas marteler un hebergeur gratuit. Le timer WinForms tique sur le
+            // thread UI -> aucune synchronisation a gerer dans le handler.
+            _pollTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+            _pollTimer.Tick += async (s, e) => await PollRemoteAsync();
+            this.FormClosed += (s, e) => { _pollTimer?.Stop(); _pollTimer?.Dispose(); _pollTimer = null; };
+            StartOrStopPolling();
+
             this.MouseDown += Drag;
+        }
+
+        // Le sondage ne tourne que quand le profil actif est distant : sur un
+        // profil local il n'y a rien a interroger.
+        private void StartOrStopPolling()
+        {
+            if (_pollTimer == null) return;
+            if (IsRemote)
+            {
+                _pollTimer.Start();
+                _ = PollRemoteAsync(); // premier etat immediat, sans attendre 3 s
+            }
+            else
+            {
+                _pollTimer.Stop();
+            }
         }
 
         // ---- Barre de profils (multi-bot) ----
@@ -151,7 +189,12 @@ namespace PlantillaChanchoV16.Template
                 if (Proc.IsRunning) Proc.Stop();
                 BotProfileStore.SetActive(chosen.Id);
                 _active = chosen;
+                // Les numeros de ligne repartent de zero d'un bot a l'autre :
+                // sans ce reset, la console melangerait les deux flux.
+                _lastLogSeq = 0;
+                _log.Clear();
                 RefreshProcUi();
+                StartOrStopPolling();
             };
 
             return rowY + rowH;
@@ -182,6 +225,7 @@ namespace PlantillaChanchoV16.Template
                 if (idx >= 0) _profileCombo.SelectedIndex = idx;
             }
             RefreshProcUi();
+            StartOrStopPolling();
         }
 
         // ---- Banniere de controle du process local ----
@@ -221,8 +265,18 @@ namespace PlantillaChanchoV16.Template
             };
             _restartBtn.Location = new Point(_banner.Width - 18 - _restartBtn.Width, (bannerH - 42) / 2);
             _restartBtn.HoverState.FillColor = ControlPaint.Light(Colors.bgColor, 0.3f);
-            _restartBtn.Click += (s, e) =>
+            _restartBtn.Click += async (s, e) =>
             {
+                if (IsRemote)
+                {
+                    AppendLog("[distant] Demande de redémarrage…");
+                    var result = await BotRemoteApi.Restart(RemoteUrl, RemoteKey);
+                    AppendLog(result.Success
+                        ? "[distant] Redémarrage demandé — l'hébergeur relance le bot."
+                        : $"[erreur] {result.Error}");
+                    return;
+                }
+
                 if (_active?.LocalFolderPath == null) return;
                 AppendLog("[process] Redémarrage…");
                 var (ok, error) = Proc.Restart(_active.LocalFolderPath);
@@ -246,6 +300,11 @@ namespace PlantillaChanchoV16.Template
         private void ToggleProcess()
         {
             if (_active == null) return;
+
+            // En distant, demarrer/arreter n'a pas de sens : c'est l'hebergeur
+            // qui maintient le bot en vie. Le bouton sert alors a rafraichir
+            // l'etat sans attendre le prochain tick.
+            if (IsRemote) { _ = PollRemoteAsync(); return; }
 
             if (Proc.IsRunning)
             {
@@ -276,31 +335,129 @@ namespace PlantillaChanchoV16.Template
             bool running = Proc.IsRunning;
 
             _startStopBtn.Enabled = hasProfile;
-            _restartBtn.Enabled = hasProfile && hasFolder;
+            _restartBtn.Enabled = hasProfile && (IsRemote || hasFolder);
 
             if (!hasProfile)
             {
                 _procStatus.Text = "No bot selected";
                 _procStatus.ForeColor = Color.FromArgb(150, 152, 168);
                 _procHint.Text = "Add a bot profile to get started.";
-            }
-            else
-            {
-                // Sans dossier local, "stopped" serait mensonger : le bot tourne
-                // peut-être très bien sur un hébergeur distant, on n'en sait rien ici.
-                _procStatus.Text = !hasFolder ? $"{_active!.Name} — remote hosting"
-                                 : running ? $"{_active!.Name} — running"
-                                 : $"{_active!.Name} — stopped";
-                _procStatus.ForeColor = running ? Colors.mainColor : Color.FromArgb(190, 255, 255, 255);
-                _procHint.Text = hasFolder
-                    ? (running ? "Process controlled locally." : "Ready to start.")
-                    : "Hosted elsewhere — quick actions below still work.";
+                SetStartStopLook("Start", accent: true);
+                _banner.Invalidate(true);
+                return;
             }
 
-            _startStopBtn.Text = running ? "Stop" : "Start";
-            _startStopBtn.FillColor = running ? Colors.bgColor : Colors.mainColor;
-            _startStopBtn.HoverState.FillColor = running ? ControlPaint.Light(Colors.bgColor, 0.3f) : ControlPaint.Light(Colors.mainColor, 0.2f);
+            if (IsRemote)
+            {
+                // Le texte d'état réel arrive du sondage (ApplyRemoteHealth) ; ici
+                // on n'affiche qu'un état d'attente, jamais "stopped" qui serait un
+                // mensonge tant qu'on n'a pas interrogé l'hébergeur.
+                SetStartStopLook("Refresh", accent: false);
+                if (string.IsNullOrEmpty(_procStatus.Text) || _procStatus.Text == "No bot selected")
+                {
+                    _procStatus.Text = $"{_active!.Name} — checking…";
+                    _procStatus.ForeColor = Color.FromArgb(190, 255, 255, 255);
+                    _procHint.Text = "Contacting the hosted bot…";
+                }
+                _banner.Invalidate(true);
+                return;
+            }
+
+            // Sans dossier local ni URL de contrôle, on ne sait rien de l'état du
+            // bot : "stopped" serait tout aussi mensonger.
+            _procStatus.Text = !hasFolder ? $"{_active!.Name} — not controllable"
+                             : running ? $"{_active!.Name} — running"
+                             : $"{_active!.Name} — stopped";
+            _procStatus.ForeColor = running ? Colors.mainColor : Color.FromArgb(190, 255, 255, 255);
+            _procHint.Text = hasFolder
+                ? (running ? "Process controlled locally." : "Ready to start.")
+                : "Set a local folder, or a control URL for a hosted bot.";
+
+            SetStartStopLook(running ? "Stop" : "Start", accent: !running);
             _banner.Invalidate(true);
+        }
+
+        private void SetStartStopLook(string text, bool accent)
+        {
+            _startStopBtn.Text = text;
+            _startStopBtn.FillColor = accent ? Colors.mainColor : Colors.bgColor;
+            _startStopBtn.HoverState.FillColor = accent
+                ? ControlPaint.Light(Colors.mainColor, 0.2f)
+                : ControlPaint.Light(Colors.bgColor, 0.3f);
+        }
+
+        // ---- Mode distant : sondage de l'API de controle du bot ----
+        private async Task PollRemoteAsync()
+        {
+            // Un sondage a la fois : sur un hebergeur lent, deux requetes qui se
+            // chevauchent afficheraient les lignes de log dans le desordre.
+            if (_pollBusy || !IsRemote || IsDisposed) return;
+            _pollBusy = true;
+            try
+            {
+                string url = RemoteUrl, key = RemoteKey;
+
+                var health = await BotRemoteApi.Health(url, key);
+                if (IsDisposed || !IsRemote) return;
+                ApplyRemoteHealth(health);
+                if (!health.Success) return;
+
+                var logs = await BotRemoteApi.Logs(url, key, _lastLogSeq);
+                if (IsDisposed || !IsRemote) return;
+                if (logs.Success && logs.Data?["lines"] is JArray lines)
+                {
+                    foreach (var line in lines)
+                    {
+                        long lineSeq = (long?)line["seq"] ?? 0;
+                        if (lineSeq <= _lastLogSeq) continue;
+                        _lastLogSeq = lineSeq;
+                        // Horodatage venant du BOT, pas de la réception : sinon
+                        // toutes les lignes d'un même sondage porteraient la même
+                        // heure, à 3 s près de la réalité.
+                        var when = DateTimeOffset.FromUnixTimeMilliseconds((long?)line["t"] ?? 0).LocalDateTime;
+                        AppendLogAt(when, (string?)line["text"] ?? "");
+                    }
+                }
+            }
+            finally
+            {
+                _pollBusy = false;
+            }
+        }
+
+        private void ApplyRemoteHealth(BotRemoteApi.Result result)
+        {
+            if (_active == null) return;
+
+            if (!result.Success)
+            {
+                _procStatus.Text = $"{_active.Name} — offline";
+                _procStatus.ForeColor = Color.FromArgb(255, 130, 120);
+                _procHint.Text = result.Error ?? "Bot injoignable.";
+                _banner.Invalidate(true);
+                return;
+            }
+
+            bool ready = (bool?)result.Data?["ready"] ?? false;
+            string guild = (string?)result.Data?["guildName"] ?? "—";
+            int members = (int?)result.Data?["memberCount"] ?? 0;
+            int ping = (int?)result.Data?["pingMs"] ?? 0;
+            long uptime = (long?)result.Data?["uptimeSeconds"] ?? 0;
+
+            _procStatus.Text = ready ? $"{_active.Name} — online (hosted)" : $"{_active.Name} — connecting…";
+            _procStatus.ForeColor = ready ? Colors.mainColor : Color.FromArgb(235, 200, 120);
+            _procHint.Text = ready
+                ? $"{guild} • {members} members • {ping} ms • up {FormatUptime(uptime)}"
+                : "Control API reachable, Discord gateway not ready yet.";
+            _banner.Invalidate(true);
+        }
+
+        private static string FormatUptime(long seconds)
+        {
+            var t = TimeSpan.FromSeconds(seconds);
+            if (t.TotalDays >= 1) return $"{(int)t.TotalDays}d {t.Hours}h";
+            if (t.TotalHours >= 1) return $"{(int)t.TotalHours}h {t.Minutes}m";
+            return $"{t.Minutes}m";
         }
 
         // ---- Panneau de logs en direct ----
@@ -331,10 +488,12 @@ namespace PlantillaChanchoV16.Template
             return boxY + boxH;
         }
 
-        private void AppendLog(string line)
+        private void AppendLog(string line) => AppendLogAt(DateTime.Now, line);
+
+        private void AppendLogAt(DateTime when, string line)
         {
-            if (_log.InvokeRequired) { _log.BeginInvoke(new Action(() => AppendLog(line))); return; }
-            _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {line}{Environment.NewLine}");
+            if (_log.InvokeRequired) { _log.BeginInvoke(new Action(() => AppendLogAt(when, line))); return; }
+            _log.AppendText($"[{when:HH:mm:ss}] {line}{Environment.NewLine}");
         }
 
         // ---- Actions rapides (API Discord directe) ----
@@ -354,7 +513,7 @@ namespace PlantillaChanchoV16.Template
             BuildActionCard(BotIcon.Kind.Announcement, "Announcement", "→ #announcements", new Point(Pad, rowY), w, h, async () => await DoAnnounce());
             BuildActionCard(BotIcon.Kind.Update, "Update", "→ #updates", new Point(Pad + (w + gap) * 1, rowY), w, h, async () => await DoUpdate());
             BuildActionCard(BotIcon.Kind.Status, "Status", "→ #status", new Point(Pad + (w + gap) * 2, rowY), w, h, async () => await DoStatus());
-            BuildActionCard(BotIcon.Kind.Tickets, "Tickets", "Open list", new Point(Pad + (w + gap) * 3, rowY), w, h, DoViewTickets);
+            BuildActionCard(BotIcon.Kind.Tickets, "Tickets", "Open list", new Point(Pad + (w + gap) * 3, rowY), w, h, async () => await DoViewTickets());
         }
 
         private void BuildActionCard(BotIcon.Kind kind, string title, string subtitle, Point loc, int w, int h, Action onClick)
@@ -445,6 +604,17 @@ namespace PlantillaChanchoV16.Template
             string productKey = Products.First(p => p.Name == dlg.SelectedProductName).Key;
             string state = dlg.StateValue;
 
+            // Bot hébergé : c'est LUI qui édite son message de statut. Il est le
+            // seul à connaître l'ID suivi dans data/store.json, fichier qui vit
+            // désormais chez l'hébergeur — le modifier d'ici posterait un doublon.
+            if (IsRemote)
+            {
+                var remote = await BotRemoteApi.SetProductStatus(RemoteUrl, RemoteKey, productKey, state);
+                SakuraMessageBox.Show(remote.Success ? "Status updated." : $"Failed: {remote.Error}", "Bot Manager",
+                    MessageBoxButtons.OK, remote.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+                return;
+            }
+
             var storeData = TryReadLocalStore();
             if (storeData?["statusMessage"] is JObject sm && sm["channelId"] != null && sm["messageId"] != null)
             {
@@ -491,13 +661,13 @@ namespace PlantillaChanchoV16.Template
             return DiscordApi.BuildEmbed("📊 PaiPai Product Status", sb.ToString().TrimEnd(), 0xE384AE, "PaiPai • Last updated");
         }
 
-        private void DoViewTickets()
+        private async Task DoViewTickets()
         {
-            var storeData = TryReadLocalStore();
+            var storeData = await LoadStoreAsync();
             if (storeData == null)
             {
                 SakuraMessageBox.Show(
-                    "No local folder configured for this bot (or data/store.json not found yet).\nEdit the profile and set the bot's project folder to view tickets.",
+                    "Ticket data unreachable.\nEither set the bot's local folder, or a control URL if the bot is hosted 24/7.",
                     "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -528,6 +698,18 @@ namespace PlantillaChanchoV16.Template
             }
             using var dlg = new SakuraInfoDialog($"Open tickets ({open.Properties().Count()})", sb.ToString().TrimEnd());
             dlg.ShowDialog(this);
+        }
+
+        // Source unique pour lire store.json : chez l'hebergeur si le profil est
+        // distant (c'est la que vit le vrai fichier), sur le disque sinon.
+        private async Task<JObject?> LoadStoreAsync()
+        {
+            if (IsRemote)
+            {
+                var result = await BotRemoteApi.Store(RemoteUrl, RemoteKey);
+                return result.Success ? result.Data?["store"] as JObject : null;
+            }
+            return TryReadLocalStore();
         }
 
         // Lit data/store.json dans le dossier local du profil actif (si configure).
