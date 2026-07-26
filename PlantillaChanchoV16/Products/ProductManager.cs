@@ -171,9 +171,12 @@ namespace PlantillaChanchoV16.Products
                     );
                 case "valorant":
                     return new Template.ProductPage(
+                        // __subscriptionName reste "Valorant" : c'est le nom de
+                        // l'abonnement sur le dashboard KeyAuth. Le renommer
+                        // invaliderait toutes les licences deja vendues.
                         __subscriptionName: "Valorant",
                         logoRounded: true,
-                        productName: "Riot Games:\nValorant",
+                        productName: "PaiPai Val + Emulator",
                         productDescription: "Take full control of every round. Precise aim assistance, lightning reflexes and smart visual tools — all in a clean, undetected package built to help you climb the ranks.",
                         __versionProduct: "1.8.2",
                         __lastUpdate: "20.12.2024",
@@ -426,7 +429,7 @@ namespace PlantillaChanchoV16.Products
                         logoProduct: images.LogoValorant,
                         logoSize: new Size(50, 50),
                         bgImage: images.BgValorant,
-                        productName: "Valorant",
+                        productName: "PaiPai Val + Emulator",
                         productDescription: "Take full control of every round. Precise aim assistance, lightning reflexes and smart visual tools — all in a clean, undetected package built to help you climb the ranks.",
                         downloadURL: $"{Login.KeyAuthApp.var("link_valorant")}", // <== LIEN VALORANT (variable KeyAuth "link_valorant")
                         zipFileName: "Valorant.zip",

@@ -214,7 +214,7 @@ namespace PlantillaChanchoV16
             // deux rectangles bleu/cyan identiques et hors charte, à côté des vraies
             // affiches Valorant et Roblox — qui, elles, gardent leur visuel officiel.
             _homeCarousel.AddCard(Template.ProductArt.Spoofer, "Spoofer", () => OpenGameDetails("anydesk"));
-            _homeCarousel.AddCard(images.BgValorant, "Valorant", () => OpenGameDetails("valorant"));
+            _homeCarousel.AddCard(images.BgValorant, "PaiPai Val + Emulator", () => OpenGameDetails("valorant"));
             _homeCarousel.AddCard(images.BgRoblox, "Roblox", () => OpenGameDetails("roblox"));
             _homeCarousel.AddCard(Template.ProductArt.WindowsPai, "Windows PaiPai", () => OpenGameDetails("windowspai"));
             _homeCarousel.AddCard(Template.ProductArt.BotManager, "Bot Manager", () => OpenGameDetails("botmanager"));

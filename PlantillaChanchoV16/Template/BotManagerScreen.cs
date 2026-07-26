@@ -1,4 +1,4 @@
-using Guna.UI2.WinForms;
+﻿using Guna.UI2.WinForms;
 using Newtonsoft.Json.Linq;
 using PlantillaChanchoV16.Utilities;
 using System;
@@ -36,7 +36,7 @@ namespace PlantillaChanchoV16.Template
         private static readonly (string Key, string Name)[] Products =
         {
             ("woofer", "Woofer"),
-            ("valorant", "Valorant"),
+            ("valorant", "PaiPai Val + Emulator"),
             ("roblox", "Roblox"),
             ("windowspai", "Windows PaiPai"),
         };

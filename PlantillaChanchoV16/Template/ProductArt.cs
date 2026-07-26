@@ -1,4 +1,4 @@
-using PlantillaChanchoV16.Utilities;
+﻿using PlantillaChanchoV16.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -33,7 +33,7 @@ namespace PlantillaChanchoV16.Template
         // sakura commun -> chaque carte est reconnaissable au premier coup d'oeil
         // tout en restant visiblement de la meme famille.
         public static Image Spoofer => Get("spoofer", "SPOOFER", Glyph.Shield, Color.FromArgb(244, 114, 182));
-        public static Image Valorant => Get("valorant", "VALORANT", Glyph.Crosshair, Color.FromArgb(255, 99, 104));
+        public static Image Valorant => Get("valorant", "PAIPAI VAL", Glyph.Crosshair, Color.FromArgb(255, 99, 104));
         public static Image Roblox => Get("roblox", "ROBLOX", Glyph.Blocks, Color.FromArgb(120, 170, 255));
         public static Image WindowsPai => Get("windowspai", "WINDOWS", Glyph.Window, Color.FromArgb(96, 214, 190));
         public static Image BotManager => Get("botmanager", "BOT MANAGER", Glyph.Bot, Color.FromArgb(186, 140, 255));

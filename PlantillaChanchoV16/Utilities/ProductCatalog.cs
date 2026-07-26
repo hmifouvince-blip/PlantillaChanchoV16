@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace PlantillaChanchoV16.Utilities
 {
@@ -17,7 +17,7 @@ namespace PlantillaChanchoV16.Utilities
         public static readonly List<Entry> All = new List<Entry>
         {
             new Entry { SubscriptionName = "Spoofer",    DisplayName = "Spoofer",        GameKey = "anydesk" },
-            new Entry { SubscriptionName = "Valorant",   DisplayName = "Valorant",       GameKey = "valorant" },
+            new Entry { SubscriptionName = "Valorant",   DisplayName = "PaiPai Val + Emulator", GameKey = "valorant" },
             new Entry { SubscriptionName = "Roblox",     DisplayName = "Roblox",         GameKey = "roblox" },
             new Entry { SubscriptionName = "WindowsPai", DisplayName = "Windows PaiPai", GameKey = "windowspai" },
             new Entry { SubscriptionName = "BotManager", DisplayName = "Bot Manager",    GameKey = "botmanager" },

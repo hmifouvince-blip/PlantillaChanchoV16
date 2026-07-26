@@ -303,7 +303,7 @@ public class AddProduct
             //new ProductView(productActive: true, productUnderMaintenance: false, "MINECRAFT", "12.01.2025", images.LogoMinecraft, images.BgMinecraft, () => openGameDetails("minecraft")),
             new ProductView(productActive: true, productUnderMaintenance: false, "ROBLOX", "12.01.2025", images.LogoRoblox, images.BgRoblox, () => openGameDetails("roblox")),
             //new ProductView(productActive: true, productUnderMaintenance: false, "RED DEAD REDEMPTION 2", "12.01.2025", images.LogoRd2, images.BgRd2, () => openGameDetails("rd2")),
-            new ProductView(productActive: true, productUnderMaintenance: false, "VALORANT", "12.01.2025", images.LogoValorant, images.BgValorant, () => openGameDetails("valorant")),
+            new ProductView(productActive: true, productUnderMaintenance: false, "PaiPai Val + Emulator", "12.01.2025", images.LogoValorant, images.BgValorant, () => openGameDetails("valorant")),
             new ProductView(productActive: true, productUnderMaintenance: false, "Windows PaiPai", "12.01.2025", ProductArt.WindowsPaiIcon, ProductArt.WindowsPai, () => openGameDetails("windowspai")),
             // Bot Manager manquait completement de la grille alors qu'il figure dans
             // ProductCatalog (et donc dans les licences) -> l'onglet Products

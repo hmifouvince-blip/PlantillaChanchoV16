@@ -1,4 +1,4 @@
-// Product catalog -> single source used by the per-product channels, the
+﻿// Product catalog -> single source used by the per-product channels, the
 // ticket dropdown, and the status page. Descriptions reused as-is from
 // Products/ProductManager.cs (the C# app) to stay consistent with what's
 // already shown inside PaiPai itself.
@@ -52,7 +52,7 @@ module.exports = [
   },
   {
     key: "valorant",
-    name: "Valorant",
+    name: "PaiPai Val + Emulator",
     channelName: "valorant",
     emoji: "🎯",
     tagline: "Every round, under control.",
