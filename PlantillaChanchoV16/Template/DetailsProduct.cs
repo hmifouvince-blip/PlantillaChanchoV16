@@ -1,4 +1,4 @@
-using Guna.UI2.WinForms;
+﻿using Guna.UI2.WinForms;
 using PlantillaChanchoV16.Utilities;
 using System;
 using System.Collections.Generic;
@@ -964,8 +964,8 @@ namespace PlantillaChanchoV16
             });
             containerIndicatorPanel = new Guna2Panel
             {
-                FillColor = ColorTranslator.FromHtml("#282A39"),
-                BorderColor = ColorTranslator.FromHtml("#282A39"),
+                FillColor = Colors.divider,
+                BorderColor = Colors.divider,
                 BorderThickness = 0,
                 Width = containerRightArea.Width,
                 Height = 2,
@@ -1017,7 +1017,7 @@ namespace PlantillaChanchoV16
             {
                 Text = $"<div style='line-height: 1.6;'>{productDescription}</div>", // PARAMETRO
                 Font = new Font("Inter Medium", 10.5f, FontStyle.Regular),
-                ForeColor = ColorTranslator.FromHtml("#878BA6"),
+                ForeColor = Colors.textMuted,
                 AutoSizeHeightOnly = true,
                 Width = containerTab1.Width,
                 TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias,
@@ -1043,13 +1043,13 @@ namespace PlantillaChanchoV16
             versionProduct = CreateStyledLabel("Version:", Color.White, Point.Empty);
             versionProduct.Location = new Point(separatorUpdates.Left, separatorUpdates.Top - versionProduct.Height - 5);
 
-            dateVersionProduct = CreateStyledLabel(_versionProduct_, ColorTranslator.FromHtml("#878BA6"), Point.Empty);
+            dateVersionProduct = CreateStyledLabel(_versionProduct_, Colors.textMuted, Point.Empty);
             dateVersionProduct.Location = new Point(separatorUpdates.Right - dateVersionProduct.Width - 5, separatorUpdates.Top - dateVersionProduct.Height);
 
             lastUpdateProduct = CreateStyledLabel("Last update:", Color.White, Point.Empty);
             lastUpdateProduct.Location = new Point(separatorUpdates.Left, separatorUpdates.Bottom + 5);
 
-            dateLastUpdateProduct = CreateStyledLabel(_lastUpdate_, ColorTranslator.FromHtml("#878BA6"), Point.Empty);
+            dateLastUpdateProduct = CreateStyledLabel(_lastUpdate_, Colors.textMuted, Point.Empty);
             dateLastUpdateProduct.Location = new Point(separatorUpdates.Right - dateLastUpdateProduct.Width - 5, separatorUpdates.Bottom + 5);
 
 
@@ -1268,12 +1268,15 @@ namespace PlantillaChanchoV16
             containerTabBtnProduct.Controls.Add(containerIndicatorPanel);
 
 
-            RoundGunaButtonCorners(imageProductBig, 4);
-            RoundGunaButtonCorners(imageProduct1, 4);
-            RoundGunaButtonCorners(imageProduct2, 4);
-            RoundGunaButtonCorners(imageProduct3, 4);
-            RoundGunaButtonCorners(imageProduct4, 4);
-            RoundGunaButtonCorners(videoProduct1, 4);
+            // Rayon 10 au lieu de 4 : le reste de l'app (cartes du carrousel, panneaux
+            // sakura, boutons Guna) est nettement plus arrondi. A 4 px, la galerie
+            // gardait l'angle sec du template d'origine et jurait avec l'ensemble.
+            RoundGunaButtonCorners(imageProductBig, 10);
+            RoundGunaButtonCorners(imageProduct1, 8);
+            RoundGunaButtonCorners(imageProduct2, 8);
+            RoundGunaButtonCorners(imageProduct3, 8);
+            RoundGunaButtonCorners(imageProduct4, 8);
+            RoundGunaButtonCorners(videoProduct1, 8);
 
             if (!logoRounded)
             {
@@ -1286,6 +1289,10 @@ namespace PlantillaChanchoV16
             this.Height = containerMain.Height;
 
             RelayoutRightArea();
+
+            // Fond sakura : la fiche etait un aplat prune uni, sans la profondeur
+            // qu'ont l'accueil et les autres ecrans.
+            Utilities.UiStyle.AttachContentBackdrop(containerHero);
 
             // Une fois l'arbre complet : sans double tampon, cette fiche (des dizaines
             // de panneaux imbriques) scintille et saccade au moindre survol ou
@@ -1445,7 +1452,7 @@ namespace PlantillaChanchoV16
             Guna2VScrollBar scrollBar = new Guna2VScrollBar
             {
                 Width = 8,
-                FillColor = ColorTranslator.FromHtml("#23242D"),
+                FillColor = Colors.scColor,
                 BorderColor = Colors.bgColor,
                 ThumbColor = Colors.mainColor,
                 Minimum = 0,
@@ -1517,7 +1524,7 @@ namespace PlantillaChanchoV16
             {
                 Width = containerRightArea.Width,
                 Height = button.Height + 8,
-                BorderColor = ColorTranslator.FromHtml("#282A39"),
+                BorderColor = Colors.divider,
                 BorderThickness = 0,
                 BackColor = Color.Transparent
             };
@@ -1537,7 +1544,7 @@ namespace PlantillaChanchoV16
             {
                 Text = text,
                 Image = coloredIcon,
-                ForeColor = ColorTranslator.FromHtml("#A2A5BE"),
+                ForeColor = Colors.textSubtle,
                 Font = new Font("Inter", 9f, FontStyle.Regular),
                 ImageAlign = HorizontalAlignment.Right,
                 TextAlign = HorizontalAlignment.Left,
@@ -1545,8 +1552,8 @@ namespace PlantillaChanchoV16
                 BackColor = Color.Transparent,
                 Height = 30,
                 ImageSize = new Size(20, 20),
-                FillColor = ColorTranslator.FromHtml("#282A39"),
-                BorderColor = ColorTranslator.FromHtml("#282A39"),
+                FillColor = Colors.divider,
+                BorderColor = Colors.divider,
                 BorderThickness = 1,
                 BorderRadius = 6,
                 Width = containerRightArea.Width - 20,
@@ -1606,7 +1613,7 @@ namespace PlantillaChanchoV16
             Guna2VScrollBar scrollBar = new Guna2VScrollBar
             {
                 Width = 8,
-                FillColor = ColorTranslator.FromHtml("#23242D"),
+                FillColor = Colors.scColor,
                 BorderColor = Colors.bgColor,
                 ThumbColor = Colors.mainColor,
                 Minimum = 0,
@@ -1672,7 +1679,7 @@ namespace PlantillaChanchoV16
             {
                 Width = containerRightArea.Width,
                 Height = button.Height + 8, 
-                BorderColor = ColorTranslator.FromHtml("#282A39"),
+                BorderColor = Colors.divider,
                 BorderThickness = 0,
                 BackColor = Color.Transparent
             };
@@ -1691,7 +1698,7 @@ namespace PlantillaChanchoV16
             {
                 Text = text,
                 Image = coloredIcon,
-                ForeColor = ColorTranslator.FromHtml("#A2A5BE"),
+                ForeColor = Colors.textSubtle,
                 Font = new Font("Inter", 9f, FontStyle.Regular),
                 ImageAlign = HorizontalAlignment.Right,
                 TextAlign = HorizontalAlignment.Left,
@@ -1699,8 +1706,8 @@ namespace PlantillaChanchoV16
                 BackColor = Color.Transparent,
                 Height = 30,
                 ImageSize = new Size(20, 20),
-                FillColor = ColorTranslator.FromHtml("#282A39"),
-                BorderColor = ColorTranslator.FromHtml("#282A39"),
+                FillColor = Colors.divider,
+                BorderColor = Colors.divider,
                 BorderThickness = 1,
                 BorderRadius = 6,
                 Width = containerRightArea.Width - 20,
@@ -1765,7 +1772,7 @@ namespace PlantillaChanchoV16
                 FillColor = Color.Transparent,
                 BorderColor = Color.Yellow,
                 BorderThickness = 0,
-                ForeColor = ColorTranslator.FromHtml("#878BA6"),
+                ForeColor = Colors.textMuted,
                 AutoSize = true,
                 Width = 100,
                 TextOffset = txOffset,
@@ -1782,7 +1789,7 @@ namespace PlantillaChanchoV16
 
             // Survol : le texte s'éclaircit (sauf sur l'onglet actif).
             TabButton.MouseEnter += (s, e) => { if (TabButton != lastClickedButton) TabButton.ForeColor = Color.FromArgb(225, 225, 232); };
-            TabButton.MouseLeave += (s, e) => { if (TabButton != lastClickedButton) TabButton.ForeColor = ColorTranslator.FromHtml("#878BA6"); };
+            TabButton.MouseLeave += (s, e) => { if (TabButton != lastClickedButton) TabButton.ForeColor = Colors.textMuted; };
 
 
 
@@ -1813,7 +1820,7 @@ namespace PlantillaChanchoV16
                 {
                     if (ctrl is Guna2Button button)
                     {
-                        button.ForeColor = ColorTranslator.FromHtml("#878BA6");
+                        button.ForeColor = Colors.textMuted;
 
                     }
                 }
