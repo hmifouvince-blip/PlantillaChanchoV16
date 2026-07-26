@@ -1484,6 +1484,15 @@ namespace PlantillaChanchoV16
             if (containerMain != null && containerMain.Height < needed) containerMain.Height = needed;
             if (containerHero != null && containerHero.Height < needed) containerHero.Height = needed;
             if (this.Height < needed) this.Height = needed;
+
+            // La LARGEUR doit suivre elle aussi : la colonne de droite est calculee
+            // sur la largeur du panneau hote, mais le formulaire, lui, restait a sa
+            // taille d'origine (828 px) et ROGNAIT tout ce qui depassait -> derniere
+            // lettre des phrases coupee, "1.8.2" affiche "1.8", "20.12.2024" ampute.
+            int neededW = containerRightArea.Right + 24;
+            if (this.Width < neededW) this.Width = neededW;
+            if (containerHero != null && containerHero.Width < neededW) containerHero.Width = neededW;
+            if (containerMain != null && containerMain.Width < neededW) containerMain.Width = neededW;
         }
 
         private string AddSpaceBetweenLetters(string text)
