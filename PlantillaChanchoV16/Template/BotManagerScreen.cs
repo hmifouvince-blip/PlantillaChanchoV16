@@ -258,21 +258,28 @@ namespace PlantillaChanchoV16.Template
         // alors besoin NI du token du bot NI de la cle de controle -> c'est ce
         // qui rend le Bot Manager utilisable par toute l'equipe, et pas
         // seulement par celui qui administre l'hebergeur.
+        // Point d'entree UNIQUE pour un nouvel utilisateur : il n'a besoin de rien
+        // d'autre que l'adresse du bot et du code affiche par /link dans Discord.
+        //
+        // Le profil est CREE ICI s'il n'en existe aucun. Auparavant on repondait
+        // "Add a bot profile first", ce qui envoyait l'utilisateur remplir un
+        // formulaire reclamant un token de bot -- precisement ce qu'un membre de
+        // l'equipe ne possede pas, et que la liaison par role sert a eviter.
         private void LinkDiscord()
         {
-            if (_active == null)
-            {
-                SakuraMessageBox.Show("Add a bot profile first.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            using var dlg = new BotLinkDialog(_active.RemoteUrl);
+            using var dlg = new BotLinkDialog(_active?.RemoteUrl);
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-            _active.RemoteUrl = dlg.Url;
-            _active.EncryptedSessionTokenBase64 = BotProfileStore.Encrypt(dlg.Token);
-            _active.LinkedDiscordTag = dlg.LinkedTag;
-            BotProfileStore.AddOrUpdate(_active);
+            var profile = _active ?? new BotProfile { Name = "PaiPai Bot" };
+
+            profile.RemoteUrl = dlg.Url;
+            profile.EncryptedSessionTokenBase64 = BotProfileStore.Encrypt(dlg.Token);
+            profile.LinkedDiscordTag = dlg.LinkedTag;
+            BotProfileStore.AddOrUpdate(profile);
+
+            // Nouveau profil -> il doit devenir l'actif, sinon la liaison
+            // n'aurait aucun effet visible.
+            if (_active == null) BotProfileStore.SetActive(profile.Id);
 
             AppendLog($"[link] Compte Discord lié : {dlg.LinkedTag}.");
             SakuraMessageBox.Show($"Linked as {dlg.LinkedTag}.\nYou can now control the bot from PaiPai.",
@@ -281,8 +288,7 @@ namespace PlantillaChanchoV16.Template
             // Le profil vient peut-etre de passer local -> distant : il faut
             // (re)demarrer le sondage, sinon l'etat resterait fige.
             _lastLogSeq = 0;
-            RefreshProcUi();
-            StartOrStopPolling();
+            ReloadProfileCombo();
         }
 
         private void RefreshLinkedLabel()
@@ -400,7 +406,9 @@ namespace PlantillaChanchoV16.Template
             RefreshLinkedLabel();
             _startStopBtn.Enabled = hasProfile;
             _restartBtn.Enabled = hasProfile && (IsRemote || hasFolder);
-            _linkBtn.Enabled = hasProfile;
+            // TOUJOURS actif, meme sans profil : c'est le point d'entree d'un
+            // nouvel utilisateur, il cree le profil lui-meme.
+            _linkBtn.Enabled = true;
 
             if (!hasProfile)
             {
