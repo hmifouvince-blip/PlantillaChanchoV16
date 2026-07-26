@@ -353,9 +353,9 @@ namespace PlantillaChanchoV16
                 BorderColor = Color.Green,
                 BorderThickness = 0,
                 Height = this.Height,
-                FillColor = Colors.bgColor,
-                BackColor = Colors.bgColor,
-                UseTransparentBackground = false,
+                FillColor = Color.Transparent,
+                BackColor = Color.Transparent,
+                UseTransparentBackground = true,
                 Width = 415,
                 AutoSize = false,
                 Location = new Point(0, 0),
@@ -853,10 +853,11 @@ namespace PlantillaChanchoV16
                 //Dock = DockStyle.Right,
                 Location = new Point(containerLeftArea.Right + 12, 0),
                 Width = this.Width - containerLeftArea.Width - 125,
-                BackColor = Colors.bgColor,
+                BackColor = Color.Transparent,
+                FillColor = Color.Transparent,
                 BorderColor = Color.Yellow,
                 BorderThickness = 0,
-                UseTransparentBackground = false,
+                UseTransparentBackground = true,
                 Height = imageProductBig.Height + containerSmallImage.Height + separationSmallImages
             };
 
@@ -929,7 +930,9 @@ namespace PlantillaChanchoV16
 
             containerTabBtnProduct = new Guna2Panel
             {
-                BackColor = Colors.bgColor,
+                BackColor = Color.Transparent,
+                FillColor = Color.Transparent,
+                UseTransparentBackground = true,
                 BorderColor = Color.Transparent,
                 BorderThickness = 1,
                 Height = 60,
@@ -977,8 +980,9 @@ namespace PlantillaChanchoV16
 
             containerTab1 = new Guna2Panel
             {
-                BackColor = Colors.bgColor,
-                UseTransparentBackground = false,
+                BackColor = Color.Transparent,
+                FillColor = Color.Transparent,
+                UseTransparentBackground = true,
                 Visible = false,
                 AutoSize = true,
                 BorderColor = Color.Green,
@@ -987,10 +991,11 @@ namespace PlantillaChanchoV16
             };
             containerTab2 = new Guna2Panel
             {
-                BackColor = Colors.bgColor,
+                BackColor = Color.Transparent,
+                FillColor = Color.Transparent,
                 BorderColor = Color.Green,
                 BorderThickness = 0,
-                UseTransparentBackground = false,
+                UseTransparentBackground = true,
                 Visible = false,
                 AutoSize = false,
                 Height = 200,
@@ -998,10 +1003,11 @@ namespace PlantillaChanchoV16
             };
             containerTab3 = new Guna2Panel
             {
-                BackColor = Colors.bgColor,
+                BackColor = Color.Transparent,
+                FillColor = Color.Transparent,
                 BorderColor = Color.Green,
                 BorderThickness = 0,
-                UseTransparentBackground = false,
+                UseTransparentBackground = true,
                 Visible = false,
                 AutoSize = false,
                 Height = 200,
@@ -1133,8 +1139,9 @@ namespace PlantillaChanchoV16
                 BorderColor = Color.Red,
                 BorderThickness = 0,
                 AutoSize = true,
-                BackColor = Colors.bgColor,
-                UseTransparentBackground = false,
+                BackColor = Color.Transparent,
+                FillColor = Color.Transparent,
+                UseTransparentBackground = true,
             };
 
             int heightItemsActivate = 40;
@@ -1368,10 +1375,83 @@ namespace PlantillaChanchoV16
             dateLastUpdateProduct.Location = new Point(Math.Max(0, w - dateLastUpdateProduct.Width - 4), y2);
         }
 
+        // Largeur utile disponible pour la fiche : celle du panneau HÔTE quand elle
+        // est intégrée dans la fenêtre principale (cas réel), sinon la sienne.
+        private int AvailableWidth => (Parent != null && Parent.Width > 200) ? Parent.Width : this.Width;
+
+        // Rend la colonne de droite RESPONSIVE.
+        //
+        // Elle était figée à `this.Width - containerLeftArea.Width - 125` : sur une
+        // fiche de 828 px, ça donnait 288 px utiles et laissait plus de 100 px de vide
+        // à droite. Résultat, la description se cassait tous les 4-5 mots et les
+        // valeurs Version / Last update débordaient du cadre. Elle occupe désormais
+        // toute la place restante, et suit la largeur de la fenêtre.
+        private void ResizeRightColumn()
+        {
+            if (containerRightArea == null || containerLeftArea == null) return;
+
+            const int Gap = 16, RightMargin = 24;
+            int width = Math.Max(300, AvailableWidth - containerLeftArea.Width - Gap - RightMargin);
+
+            containerRightArea.Location = new Point(containerLeftArea.Right + Gap, containerRightArea.Top);
+            containerRightArea.Width = width;
+
+            if (containerProductName != null) containerProductName.Width = width;
+            if (nameProduct != null && logoProduct != null)
+                nameProduct.Width = width - logoProduct.Width - 30;
+
+            if (containerTabBtnProduct != null) containerTabBtnProduct.Width = width;
+            if (containerIndicatorPanel != null) containerIndicatorPanel.Width = width;
+
+            foreach (var tab in new[] { containerTab1, containerTab2, containerTab3 })
+                if (tab != null) tab.Width = width;
+
+            // Les LIGNES de ces deux listes ont été créées à l'ancienne largeur :
+            // redimensionner seulement leur conteneur les laissait tronquées au
+            // milieu de la colonne. Elles vivent dans un panneau défilant
+            // intermédiaire (contentPanel), d'où les deux niveaux — mais on épargne
+            // la barre de défilement, qui doit rester fine.
+            // Hiérarchie réelle : liste > panneau défilant > panneau de ligne > bouton.
+            // Quatre niveaux, d'où la descente récursive.
+            foreach (var list in new[] { containerListRequirements, containerListFeatures })
+            {
+                if (list == null) continue;
+                list.Width = width;
+                WidenRows(list, width - 10);
+
+                // La barre de défilement était posée au bord DROIT de l'ancienne
+                // largeur, et restait visible même sans rien à faire défiler
+                // (Maximum = 0) -> un trait vertical isolé en plein milieu du vide.
+                foreach (Control c in list.Controls)
+                {
+                    if (!(c is Guna2VScrollBar sb)) continue;
+                    sb.Location = new Point(width - sb.Width - 2, 0);
+                    sb.Visible = sb.Maximum > 0;
+                }
+            }
+
+            if (separatorUpdates != null) separatorUpdates.Width = width;
+            if (descriptionProduct != null) descriptionProduct.Width = width;
+            if (btnActivateProduct != null) btnActivateProduct.Width = width;
+        }
+
+        // Élargit récursivement les lignes d'une liste, en épargnant la barre de
+        // défilement (qui doit rester fine) et sa position, calée à droite.
+        private static void WidenRows(Control parent, int width)
+        {
+            foreach (Control child in parent.Controls)
+            {
+                if (child is Guna2VScrollBar) continue;
+                child.Width = width;
+                WidenRows(child, width);
+            }
+        }
+
         private void RelayoutRightArea()
         {
             if (containerRightArea == null || containerActivateProduct == null) return;
 
+            ResizeRightColumn();
             RestackAboutTab();
 
             var tab = _activeTab ?? containerTab1;
@@ -1388,6 +1468,12 @@ namespace PlantillaChanchoV16
             // separationSmallImages est une variable LOCALE à la construction.
             int mediaHeight = containerSmallImage?.Bottom ?? containerLeftArea?.Height ?? 0;
             containerRightArea.Height = Math.Max(mediaHeight, containerActivateProduct.Bottom + 16);
+
+            // La colonne média épousait la hauteur du FORMULAIRE alors que son contenu
+            // s'arrête bien avant : elle laissait un grand aplat vide sous la galerie.
+            // On la recale sur sa dernière image.
+            if (containerLeftArea != null && containerSmallImage != null)
+                containerLeftArea.Height = containerSmallImage.Bottom + 4;
 
             // TOUTE la chaîne de conteneurs doit suivre, pas seulement la fiche :
             // containerHero est dimensionné une fois pour toutes sur la taille
