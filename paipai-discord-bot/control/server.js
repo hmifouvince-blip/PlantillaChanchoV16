@@ -14,7 +14,7 @@ const crypto = require("node:crypto");
 const util = require("node:util");
 const store = require("../utils/store");
 const products = require("../config/products");
-const { buildStatusEmbed } = require("../commands/status-set");
+const { buildStatusEmbed, logoAttachment } = require("../commands/status-set");
 
 const MAX_LINES = 300;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -172,7 +172,7 @@ async function handle(req, res, client) {
       return send(409, { ok: false, error: "Message de statut introuvable — relance /setup-server." });
     }
 
-    await message.edit({ embeds: [buildStatusEmbed(data.productStatus)] });
+    await message.edit({ embeds: [buildStatusEmbed(data.productStatus)], files: [logoAttachment()] });
     return send(200, { ok: true });
   }
 

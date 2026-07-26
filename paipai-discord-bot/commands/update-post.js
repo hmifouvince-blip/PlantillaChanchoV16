@@ -1,6 +1,6 @@
 // /update-post -> posts a changelog entry in #updates.
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType, MessageFlags } = require("discord.js");
-const branding = require("../config/branding");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require("discord.js");
+const { brandedEmbed, logoAttachment } = require("../utils/embeds");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,14 +26,14 @@ module.exports = {
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(branding.colors.main)
-      .setTitle(`🆕 ${title}`)
-      .setDescription(description)
-      .setFooter({ text: branding.footerText })
-      .setTimestamp(Date.now());
+    const embed = brandedEmbed({
+      kicker: "🆕 Mise à jour",
+      title,
+      description,
+      footer: "PaiPai • Update",
+    });
 
-    await channel.send({ embeds: [embed] });
+    await channel.send({ embeds: [embed], files: [logoAttachment()] });
     await interaction.reply({ content: `✅ Update posted in ${channel}.`, flags: MessageFlags.Ephemeral });
   },
 };

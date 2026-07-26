@@ -1,8 +1,8 @@
 // /status-set -> updates a product's status on the #status page. The bot
 // always EDITS the same message (never reposts) — its ID is tracked in
 // data/store.json (store.statusMessage).
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require("discord.js");
-const branding = require("../config/branding");
+const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
+const { brandedEmbed, logoAttachment } = require("../utils/embeds");
 const products = require("../config/products");
 const store = require("../utils/store");
 
@@ -18,12 +18,12 @@ function buildStatusEmbed(productStatus) {
     return `**${p.name}** — ${STATUS_LABELS[state] || STATUS_LABELS.online}`;
   });
 
-  return new EmbedBuilder()
-    .setColor(branding.colors.main)
-    .setTitle("📊 PaiPai Product Status")
-    .setDescription(lines.join("\n"))
-    .setFooter({ text: `${branding.footerText} • Last updated` })
-    .setTimestamp(Date.now());
+  return brandedEmbed({
+    kicker: "📊 État des services",
+    title: "PaiPai — Statut des produits",
+    description: lines.join("\n"),
+    footer: "PaiPai • Dernière mise à jour",
+  });
 }
 
 // Posts the status message if it doesn't exist yet (or if the previous one
@@ -37,7 +37,7 @@ async function ensureStatusMessage(channel) {
   }
 
   const embed = buildStatusEmbed(data.productStatus);
-  const message = await channel.send({ embeds: [embed] });
+  const message = await channel.send({ embeds: [embed], files: [logoAttachment()] });
   store.update((d) => {
     d.statusMessage = { channelId: channel.id, messageId: message.id };
   });
@@ -47,6 +47,7 @@ async function ensureStatusMessage(channel) {
 module.exports = {
   buildStatusEmbed,
   ensureStatusMessage,
+  logoAttachment,
   data: new SlashCommandBuilder()
     .setName("status-set")
     .setDescription("Updates a product's status on the #status page.")
@@ -96,7 +97,7 @@ module.exports = {
       return;
     }
 
-    await message.edit({ embeds: [buildStatusEmbed(data.productStatus)] });
+    await message.edit({ embeds: [buildStatusEmbed(data.productStatus)], files: [logoAttachment()] });
     await interaction.editReply("✅ Status updated.");
   },
 };

@@ -79,6 +79,38 @@ client.once("clientReady", () => clearTimeout(readyWatchdog));
 client.once("ready", () => clearTimeout(readyWatchdog));
 
 const token = (process.env.BOT_TOKEN || "").trim();
+
+// Diagnostic independant de discord.js, lance en parallele du login. Un seul
+// appel REST tranche entre les deux causes qu'on ne peut pas distinguer
+// autrement quand la passerelle reste muette : reseau bloque par l'hebergeur
+// (echec de la requete) ou token refuse (HTTP 401).
+(async () => {
+  try {
+    const startedAt = Date.now();
+    const response = await fetch("https://discord.com/api/v10/users/@me", {
+      headers: { Authorization: `Bot ${token}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    const elapsed = Date.now() - startedAt;
+
+    if (response.status === 200) {
+      const me = await response.json();
+      console.log(`[net] API Discord joignable en ${elapsed} ms — token valide (${me.username}).`);
+    } else if (response.status === 401) {
+      console.error(
+        "[net] API Discord joignable, mais TOKEN REFUSE (401) : le BOT_TOKEN du .env ne " +
+          "correspond a aucune application. Regenere-le dans le portail developpeur."
+      );
+    } else {
+      console.error(`[net] API Discord a repondu HTTP ${response.status} en ${elapsed} ms.`);
+    }
+  } catch (err) {
+    console.error(
+      `[net] discord.com INJOIGNABLE (${err.message}) : la sortie reseau de l'hebergeur ` +
+        "est bloquee ou filtree. Le bot ne pourra pas se connecter depuis cette machine."
+    );
+  }
+})();
 // Un token colle depuis un panel web arrive souvent avec des guillemets ou des
 // espaces : ils rendent le token invalide sans que le message d'erreur le dise.
 console.log(`[discord] Connexion avec un token de ${token.length} caracteres...`);

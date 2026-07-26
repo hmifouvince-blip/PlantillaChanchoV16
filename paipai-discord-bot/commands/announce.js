@@ -1,6 +1,6 @@
 // /announce -> posts an official announcement in #announcements.
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType, MessageFlags } = require("discord.js");
-const branding = require("../config/branding");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require("discord.js");
+const { brandedEmbed, logoAttachment } = require("../utils/embeds");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,14 +26,18 @@ module.exports = {
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(branding.colors.main)
-      .setTitle(`📢 ${title}`)
-      .setDescription(message)
-      .setFooter({ text: branding.footerText })
-      .setTimestamp(Date.now());
+    const embed = brandedEmbed({
+      kicker: "📢 Annonce officielle",
+      title,
+      description: message,
+      footer: "PaiPai • Annonce",
+    });
 
-    await channel.send({ content: ping ? "@everyone" : undefined, embeds: [embed] });
+    await channel.send({
+      content: ping ? "@everyone" : undefined,
+      embeds: [embed],
+      files: [logoAttachment()],
+    });
     await interaction.reply({ content: `✅ Announcement posted in ${channel}.`, flags: MessageFlags.Ephemeral });
   },
 };
