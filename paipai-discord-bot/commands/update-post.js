@@ -13,12 +13,23 @@ function findChannel(guild, name) {
 async function postUpdate(guild, { title, changelog, productKey, version, note, ping }) {
   await guild.channels.fetch();
   const channel = findChannel(guild, "updates");
-  if (!channel) return { ok: false, error: "Salon #updates introuvable — lance /setup-server." };
+  if (!channel) return { ok: false, error: "#updates channel not found — run /setup-server." };
 
   const product = productKey ? products.find((p) => p.key === productKey) || null : null;
-  if (productKey && !product) return { ok: false, error: `Produit inconnu : ${productKey}` };
+  if (productKey && !product) return { ok: false, error: `Unknown product: ${productKey}` };
 
-  const embed = updateEmbed({ title, changelog, product, version, note });
+  // Le salon du produit peut ne pas exister (setup-server jamais lance, ou
+  // salon supprime a la main) -> l'embed retombe alors sur le nom en clair.
+  const productChannel = product ? findChannel(guild, product.channelName) : null;
+
+  const embed = updateEmbed({
+    title,
+    changelog,
+    product,
+    version,
+    note,
+    productChannelId: productChannel ? productChannel.id : null,
+  });
   const message = await channel.send({
     content: ping ? "@everyone" : undefined,
     embeds: [embed],
@@ -32,29 +43,29 @@ module.exports = {
   postUpdate,
   data: new SlashCommandBuilder()
     .setName("update-post")
-    .setDescription("Publie une mise à jour dans #updates.")
+    .setDescription("Publishes an update in #updates.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
-      opt.setName("title").setDescription("Titre (ex: PaiPai v3.9)").setRequired(true)
+      opt.setName("title").setDescription("Title (e.g. Valorant)").setRequired(true)
     )
     .addStringOption((opt) =>
       opt
         .setName("changelog")
-        .setDescription("Une ligne par changement. Préfixe: + ajout, - retrait, ! correction.")
+        .setDescription("One change per line. Prefix: + added, - removed, ! fixed.")
         .setRequired(true)
     )
     .addStringOption((opt) =>
       opt
         .setName("product")
-        .setDescription("Produit concerné (optionnel)")
+        .setDescription("Related product (optional)")
         .setRequired(false)
         .addChoices(...products.map((p) => ({ name: p.name, value: p.key })))
     )
     .addStringOption((opt) =>
-      opt.setName("version").setDescription("Numéro de version (ex: v3.9)").setRequired(false)
+      opt.setName("version").setDescription("Version number (e.g. v3.9)").setRequired(false)
     )
     .addStringOption((opt) =>
-      opt.setName("note").setDescription("Avertissement affiché sous le changelog").setRequired(false)
+      opt.setName("note").setDescription("Warning shown under the changelog").setRequired(false)
     ),
 
   async execute(interaction) {
@@ -69,7 +80,7 @@ module.exports = {
     });
 
     await interaction.editReply(
-      result.ok ? `✅ Mise à jour publiée dans <#${result.channelId}>.` : `❌ ${result.error}`
+      result.ok ? `✅ Update posted in <#${result.channelId}>.` : `❌ ${result.error}`
     );
   },
 };

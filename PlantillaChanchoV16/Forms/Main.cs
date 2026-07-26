@@ -203,11 +203,15 @@ namespace PlantillaChanchoV16
             };
             _homeCarousel.Location = new Point(ContentSideMargin, _containerSpecialProduct.Bottom + ContentTopGap);
 
-            _homeCarousel.AddCard(images.Img2Anydesk, "Spoofer", () => OpenGameDetails("anydesk"));
+            // Affiches DEDIEES a chaque produit (Template/ProductArt.cs). Avant, trois
+            // cartes sur cinq réutilisaient la même capture générique Img2Anydesk :
+            // deux rectangles bleu/cyan identiques et hors charte, à côté des vraies
+            // affiches Valorant et Roblox — qui, elles, gardent leur visuel officiel.
+            _homeCarousel.AddCard(Template.ProductArt.Spoofer, "Spoofer", () => OpenGameDetails("anydesk"));
             _homeCarousel.AddCard(images.BgValorant, "Valorant", () => OpenGameDetails("valorant"));
             _homeCarousel.AddCard(images.BgRoblox, "Roblox", () => OpenGameDetails("roblox"));
-            _homeCarousel.AddCard(images.Img2Anydesk, "Windows PaiPai", () => OpenGameDetails("windowspai"));
-            _homeCarousel.AddCard(images.Img2Anydesk, "Bot Manager", () => OpenGameDetails("botmanager"));
+            _homeCarousel.AddCard(Template.ProductArt.WindowsPai, "Windows PaiPai", () => OpenGameDetails("windowspai"));
+            _homeCarousel.AddCard(Template.ProductArt.BotManager, "Bot Manager", () => OpenGameDetails("botmanager"));
         }
 
 

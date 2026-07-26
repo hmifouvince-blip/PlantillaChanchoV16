@@ -73,7 +73,7 @@ function createCode(userId) {
 // reessaye en boucle en attendant que la victime recoive le role.
 async function redeemCode(client, rawCode) {
   const code = String(rawCode || "").trim().toUpperCase();
-  if (!code) return { ok: false, error: "Code manquant." };
+  if (!code) return { ok: false, error: "Missing code." };
 
   let entry = null;
   store.update((data) => {
@@ -82,18 +82,18 @@ async function redeemCode(client, rawCode) {
     delete data.linkCodes[code];
   });
 
-  if (!entry) return { ok: false, error: "Code invalide ou expiré. Retape /link dans Discord." };
+  if (!entry) return { ok: false, error: "Invalid or expired code. Run /link again in Discord." };
 
   const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
-  if (!guild) return { ok: false, error: "Serveur Discord introuvable." };
+  if (!guild) return { ok: false, error: "Discord server not found." };
 
   const member = await guild.members.fetch(entry.userId).catch(() => null);
-  if (!member) return { ok: false, error: "Tu n'es plus membre du serveur." };
+  if (!member) return { ok: false, error: "You are no longer a member of the server." };
 
   if (!hasAdminRole(member)) {
     return {
       ok: false,
-      error: `Accès refusé : il faut le rôle ${branding.adminRoleNames.join(" ou ")}.`,
+      error: `Access denied: the ${branding.adminRoleNames.join(" or ")} role is required.`,
     };
   }
 

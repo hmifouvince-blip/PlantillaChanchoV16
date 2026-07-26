@@ -13,7 +13,7 @@ const link = require("../features/link");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("link")
-    .setDescription("Génère un code pour piloter le bot depuis l'application PaiPai.")
+    .setDescription("Generates a code to control the bot from the PaiPai app.")
     .setDMPermission(false),
 
   async execute(interaction) {
@@ -22,7 +22,7 @@ module.exports = {
     const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
     if (!member || !link.hasAdminRole(member)) {
       await interaction.editReply(
-        `❌ Réservé aux porteurs du rôle **${branding.adminRoleNames.join("** ou **")}**.`
+        `❌ Reserved for members with the **${branding.adminRoleNames.join("** or **")}** role.`
       );
       return;
     }
@@ -31,15 +31,15 @@ module.exports = {
 
     await interaction.editReply(
       [
-        "🔗 **Lier ton compte à PaiPai**",
+        "🔗 **Link your account to PaiPai**",
         "",
-        `Ton code : \`\`\`${code}\`\`\``,
-        `⏱️ Valable **${expiresInMinutes} minutes**, utilisable **une seule fois**.`,
+        `Your code: \`\`\`${code}\`\`\``,
+        `⏱️ Valid for **${expiresInMinutes} minutes**, **single use**.`,
         "",
-        "**Dans PaiPai** → *Bot Manager* → **Link Discord** → colle ce code.",
+        "**In PaiPai** → *Bot Manager* → **Link Discord** → paste this code.",
         "",
-        "⚠️ Ne le partage à personne : il donne le contrôle du bot. " +
-          "Si tu le regénères, l'ancien code est immédiatement invalidé.",
+        "⚠️ Do not share it — it grants control of the bot. " +
+          "Generating a new one immediately invalidates this code.",
       ].join("\n")
     );
   },

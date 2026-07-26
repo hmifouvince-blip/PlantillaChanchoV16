@@ -93,7 +93,7 @@ function sameSecret(provided, expected) {
 // Renvoie null si aucune des deux ne convient.
 function identify(req) {
   if (sameSecret(req.headers["x-paipai-key"], process.env.CONTROL_KEY)) {
-    return { kind: "key", label: "clé de contrôle", roles: [] };
+    return { kind: "key", label: "control key", roles: [] };
   }
 
   const token = req.headers["x-paipai-token"];
@@ -112,7 +112,7 @@ function readJsonBody(req) {
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new Error("Corps de requête trop volumineux."));
+        reject(new Error("Request body too large."));
         req.destroy();
         return;
       }
@@ -123,7 +123,7 @@ function readJsonBody(req) {
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       } catch {
-        reject(new Error("JSON invalide."));
+        reject(new Error("Invalid JSON."));
       }
     });
     req.on("error", reject);
@@ -152,12 +152,12 @@ async function handle(req, res, client) {
   if (req.method === "POST" && url.pathname === "/link/redeem") {
     const ip = req.socket.remoteAddress || "?";
     if (tooManyRedeems(ip)) {
-      return send(429, { ok: false, error: "Trop de tentatives. Réessaie dans 10 minutes." });
+      return send(429, { ok: false, error: "Too many attempts. Try again in 10 minutes." });
     }
     const body = await readJsonBody(req);
     const result = await link.redeemCode(client, body.code);
     if (!result.ok) return send(403, result);
-    console.log(`[link] ${result.tag} a lié une application PaiPai (${result.roles.join(", ")}).`);
+    console.log(`[link] ${result.tag} linked a PaiPai app (${result.roles.join(", ")}).`);
     return send(200, result);
   }
 
@@ -165,7 +165,7 @@ async function handle(req, res, client) {
   if (!caller) {
     return send(401, {
       ok: false,
-      error: "Non autorisé : clé de contrôle absente/invalide, ou lien Discord expiré (retape /link).",
+      error: "Unauthorized: missing/invalid control key, or expired Discord link (run /link again).",
     });
   }
 
@@ -211,7 +211,7 @@ async function handle(req, res, client) {
   if (caller.kind === "session" && !(await link.revalidate(client, caller.token))) {
     return send(403, {
       ok: false,
-      error: `Accès révoqué : tu n'as plus le rôle ${branding.adminRoleNames.join(" ou ")}.`,
+      error: `Access revoked: you no longer have the ${branding.adminRoleNames.join(" or ")} role.`,
     });
   }
 
@@ -219,10 +219,10 @@ async function handle(req, res, client) {
     const body = await readJsonBody(req);
     const title = String(body.title || "").trim();
     const message = String(body.message || "").trim();
-    if (!title || !message) return send(400, { ok: false, error: "Titre et message obligatoires." });
+    if (!title || !message) return send(400, { ok: false, error: "Title and message are required." });
 
     const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
-    if (!guild) return send(409, { ok: false, error: "Serveur Discord introuvable." });
+    if (!guild) return send(409, { ok: false, error: "Discord server not found." });
 
     const result = await postAnnounce(guild, { title, message, ping: body.ping === true });
     if (result.ok) console.log(`[control] Annonce publiée par ${caller.label} : « ${title} ».`);
@@ -233,10 +233,10 @@ async function handle(req, res, client) {
     const body = await readJsonBody(req);
     const title = String(body.title || "").trim();
     const changelog = String(body.changelog || "").trim();
-    if (!title || !changelog) return send(400, { ok: false, error: "Titre et changelog obligatoires." });
+    if (!title || !changelog) return send(400, { ok: false, error: "Title and changelog are required." });
 
     const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
-    if (!guild) return send(409, { ok: false, error: "Serveur Discord introuvable." });
+    if (!guild) return send(409, { ok: false, error: "Discord server not found." });
 
     const result = await postUpdate(guild, {
       title,
@@ -252,7 +252,7 @@ async function handle(req, res, client) {
 
   if (req.method === "POST" && url.pathname === "/restart") {
     console.log(`[control] Redémarrage demandé par ${caller.label}.`);
-    send(200, { ok: true, message: "Redémarrage en cours." });
+    send(200, { ok: true, message: "Restarting." });
     // On laisse la reponse partir avant de mourir. Sortie code 0 : tous les
     // hebergeurs relancent automatiquement le process.
     setTimeout(() => process.exit(0), 150);
@@ -269,10 +269,10 @@ async function handle(req, res, client) {
     const state = String(body.state || "");
 
     if (!products.some((p) => p.key === productKey)) {
-      return send(400, { ok: false, error: `Produit inconnu : ${productKey}` });
+      return send(400, { ok: false, error: `Unknown product: ${productKey}` });
     }
     if (!VALID_STATES.includes(state)) {
-      return send(400, { ok: false, error: `État invalide : ${state}` });
+      return send(400, { ok: false, error: `Invalid state: ${state}` });
     }
 
     const data = store.update((d) => {
@@ -280,7 +280,7 @@ async function handle(req, res, client) {
     });
 
     if (!data.statusMessage) {
-      return send(409, { ok: false, error: "Aucune page de statut suivie — lance /setup-server d'abord." });
+      return send(409, { ok: false, error: "No tracked status page — run /setup-server first." });
     }
 
     const channel = await client.channels.fetch(data.statusMessage.channelId).catch(() => null);
@@ -289,14 +289,14 @@ async function handle(req, res, client) {
       : null;
 
     if (!message) {
-      return send(409, { ok: false, error: "Message de statut introuvable — relance /setup-server." });
+      return send(409, { ok: false, error: "Status message not found — run /setup-server again." });
     }
 
     await message.edit({ embeds: [buildStatusEmbed(data.productStatus)], files: [logoAttachment()] });
     return send(200, { ok: true });
   }
 
-  return send(404, { ok: false, error: "Route inconnue." });
+  return send(404, { ok: false, error: "Unknown route." });
 }
 
 function start(client) {

@@ -22,8 +22,8 @@ const ASSETS = path.join(__dirname, "..", "assets");
 // partout (paiement gere a la main dans le ticket, cf. README).
 const COMMON_FAQ = [
   {
-    q: "Comment acheter ?",
-    a: "Clique sur **Acheter** ci-dessous : un ticket privé s'ouvre avec le Staff, qui te guide jusqu'à la livraison.",
+    q: "How do I buy?",
+    a: "Click **Buy** below — a private ticket opens with the Staff, who will guide you through to delivery.",
   },
 ];
 

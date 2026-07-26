@@ -6,7 +6,7 @@ const link = require("../features/link");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("unlink")
-    .setDescription("Révoque l'accès de toutes tes applications PaiPai liées.")
+    .setDescription("Revokes access for all your linked PaiPai apps.")
     .setDMPermission(false),
 
   async execute(interaction) {
@@ -15,8 +15,8 @@ module.exports = {
     const removed = link.revokeAllForUser(interaction.user.id);
     await interaction.editReply(
       removed === 0
-        ? "ℹ️ Aucune application liée à ton compte."
-        : `✅ ${removed} accès révoqué(s). Ces PaiPai ne peuvent plus piloter le bot.`
+        ? "ℹ️ No PaiPai app is linked to your account."
+        : `✅ ${removed} access revoked. Those PaiPai apps can no longer control the bot.`
     );
   },
 };

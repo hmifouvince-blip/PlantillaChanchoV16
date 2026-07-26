@@ -19,10 +19,10 @@ function buildStatusEmbed(productStatus) {
   });
 
   return brandedEmbed({
-    kicker: "📊 État des services",
-    title: "PaiPai — Statut des produits",
+    kicker: "📊 Service status",
+    title: "PaiPai — Product status",
     description: lines.join("\n"),
-    footer: "PaiPai • Dernière mise à jour",
+    footer: "PaiPai • Last updated",
   });
 }
 

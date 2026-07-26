@@ -51,7 +51,7 @@ function renderChangelog(raw) {
 
   let body = neutralizeFences(lines.join("\n"));
   if (body.length > MAX_BLOCK) {
-    body = `${body.slice(0, MAX_BLOCK)}\n… (changelog tronqué)`;
+    body = `${body.slice(0, MAX_BLOCK)}\n… (changelog truncated)`;
   }
   return "```diff\n" + body + "\n```";
 }

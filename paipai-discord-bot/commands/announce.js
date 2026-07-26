@@ -10,7 +10,7 @@ async function postAnnounce(guild, { title, message, ping }) {
   const channel = guild.channels.cache.find(
     (c) => c.type === ChannelType.GuildText && c.name === "announcements"
   );
-  if (!channel) return { ok: false, error: "Salon #announcements introuvable — lance /setup-server." };
+  if (!channel) return { ok: false, error: "#announcements channel not found — run /setup-server." };
 
   const sent = await channel.send({
     content: ping ? "@everyone" : undefined,
@@ -25,12 +25,12 @@ module.exports = {
   postAnnounce,
   data: new SlashCommandBuilder()
     .setName("announce")
-    .setDescription("Publie une annonce dans #announcements.")
+    .setDescription("Publishes an announcement in #announcements.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption((opt) => opt.setName("title").setDescription("Titre de l'annonce").setRequired(true))
-    .addStringOption((opt) => opt.setName("message").setDescription("Contenu").setRequired(true))
+    .addStringOption((opt) => opt.setName("title").setDescription("Announcement title").setRequired(true))
+    .addStringOption((opt) => opt.setName("message").setDescription("Content").setRequired(true))
     .addBooleanOption((opt) =>
-      opt.setName("ping").setDescription("Mentionner @everyone ?").setRequired(false)
+      opt.setName("ping").setDescription("Mention @everyone?").setRequired(false)
     ),
 
   async execute(interaction) {
@@ -43,7 +43,7 @@ module.exports = {
     });
 
     await interaction.editReply(
-      result.ok ? `✅ Annonce publiée dans <#${result.channelId}>.` : `❌ ${result.error}`
+      result.ok ? `✅ Announcement posted in <#${result.channelId}>.` : `❌ ${result.error}`
     );
   },
 };

@@ -2,6 +2,9 @@
 // a jour, fiches produit, page de statut) -> un seul endroit a modifier pour
 // changer le rendu partout, que la publication vienne d'une commande slash
 // ou de l'application PaiPai via l'API de controle.
+//
+// Les textes affiches sont en ANGLAIS (langue du serveur Discord et de
+// l'application) ; seuls les commentaires restent en francais.
 const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const branding = require("../config/branding");
 const { renderChangelog } = require("./changelog");
@@ -9,9 +12,9 @@ const { renderChangelog } = require("./changelog");
 const LOGO_URI = `attachment://${branding.logoAttachmentName}`;
 
 const STATUS_LABELS = {
-  online: "🟢 En ligne",
+  online: "🟢 Online",
   maintenance: "🟡 Maintenance",
-  offline: "🔴 Hors ligne",
+  offline: "🔴 Offline",
 };
 
 // A joindre (via `files:`) a CHAQUE message/edit qui utilise ces embeds,
@@ -60,31 +63,33 @@ function brandedEmbed({ kicker, title, description, footer, color }) {
 function announceEmbed({ title, message }) {
   return new EmbedBuilder()
     .setColor(branding.colors.main)
-    .setAuthor({ name: "PaiPai — Annonce officielle", iconURL: LOGO_URI })
+    .setAuthor({ name: "PaiPai — Official announcement", iconURL: LOGO_URI })
     .setTitle(`📢 ${title}`)
     .setDescription(message)
     .setThumbnail(LOGO_URI)
-    .setFooter(footerFor("Annonce"))
+    .setFooter(footerFor("Announcement"))
     .setTimestamp(Date.now());
 }
 
 // ---- Mise a jour / changelog ----
 // `changelog` est du texte libre : chaque ligne prefixee par +, -, ! ou *
 // ressort coloree (voir utils/changelog.js). Sans prefixe -> ligne neutre.
-function updateEmbed({ title, changelog, product, version, note }) {
+// `productChannelId` rend le champ Product cliquable : le lecteur saute
+// directement au salon du produit concerne au lieu de devoir le chercher.
+function updateEmbed({ title, changelog, product, version, note, productChannelId }) {
   const block = renderChangelog(changelog);
   const parts = [];
 
   if (product) parts.push(`> *${product.tagline}*`);
-  parts.push("**Changements**");
+  parts.push("**Changes**");
   // Un changelog vide ne doit pas produire un bloc de code vide (moche et
   // deroutant) : on retombe sur le texte brut tel qu'il a ete saisi.
-  parts.push(block ?? `_${String(changelog || "").trim() || "Aucun détail fourni."}_`);
+  parts.push(block ?? `_${String(changelog || "").trim() || "No details provided."}_`);
   if (note) parts.push(`⚠️ ${note}`);
 
   const embed = new EmbedBuilder()
     .setColor(branding.colors.main)
-    .setAuthor({ name: "PaiPai — Mise à jour", iconURL: LOGO_URI })
+    .setAuthor({ name: "PaiPai — Update", iconURL: LOGO_URI })
     .setTitle(version ? `🆕 ${title} • ${version}` : `🆕 ${title}`)
     .setDescription(parts.join("\n\n"))
     .setThumbnail(imageUriFor(product))
@@ -92,7 +97,13 @@ function updateEmbed({ title, changelog, product, version, note }) {
     .setTimestamp(Date.now());
 
   const fields = [];
-  if (product) fields.push({ name: "📦 Produit", value: product.name, inline: true });
+  if (product) {
+    fields.push({
+      name: "📦 Product",
+      value: productChannelId ? `<#${productChannelId}>` : product.name,
+      inline: true,
+    });
+  }
   if (version) fields.push({ name: "🏷️ Version", value: `\`${version}\``, inline: true });
   if (fields.length > 0) embed.addFields(fields);
 
@@ -112,7 +123,7 @@ function productEmbed(product, state) {
   const status = STATUS_LABELS[state] || STATUS_LABELS.online;
 
   const description = [`> *${product.tagline}*`, product.description];
-  if (product.note) description.push(`⚠️ **À savoir**\n${product.note}`);
+  if (product.note) description.push(`⚠️ **Good to know**\n${product.note}`);
 
   const embed = new EmbedBuilder()
     .setColor(branding.colors.main)
@@ -125,11 +136,11 @@ function productEmbed(product, state) {
     .setTimestamp(Date.now());
 
   const prices = priceBlock(product.prices);
-  if (prices) embed.addFields({ name: "💎 Tarifs", value: prices, inline: false });
+  if (prices) embed.addFields({ name: "💎 Pricing", value: prices, inline: false });
 
-  embed.addFields({ name: "📊 Disponibilité", value: status, inline: true });
+  embed.addFields({ name: "📊 Availability", value: status, inline: true });
   if (product.delivery) {
-    embed.addFields({ name: "⚡ Livraison", value: product.delivery, inline: true });
+    embed.addFields({ name: "⚡ Delivery", value: product.delivery, inline: true });
   }
 
   for (const item of product.faq || []) {
@@ -146,7 +157,7 @@ function productComponents(product, buyCustomId) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(buyCustomId)
-      .setLabel(`Acheter ${product.name}`)
+      .setLabel(`Buy ${product.name}`)
       .setEmoji("🛒")
       .setStyle(ButtonStyle.Success)
   );
@@ -157,7 +168,7 @@ function productComponents(product, buyCustomId) {
   const url = product.website || branding.website;
   if (url) {
     row.addComponents(
-      new ButtonBuilder().setLabel("Site web").setEmoji("🌐").setStyle(ButtonStyle.Link).setURL(url)
+      new ButtonBuilder().setLabel("Website").setEmoji("🌐").setStyle(ButtonStyle.Link).setURL(url)
     );
   }
 

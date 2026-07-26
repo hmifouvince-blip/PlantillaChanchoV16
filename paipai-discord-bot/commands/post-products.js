@@ -37,17 +37,17 @@ async function postDirectory(directoryChannel, channelsByProductKey) {
     const state = statusMap[p.key] || p.defaultStatus;
     // La pastille de statut est le 1er "mot" du libelle.
     const dot = (STATUS_LABELS[state] || STATUS_LABELS.online).split(" ")[0];
-    const target = ch ? `${ch}` : "_salon manquant_";
+    const target = ch ? `${ch}` : "_channel missing_";
     return `${dot} ${p.emoji} **${p.name}** — ${target}`;
   });
 
   const embed = brandedEmbed({
     kicker: "PaiPai",
-    title: "🌸 Nos produits",
+    title: "🌸 Our products",
     description:
-      "Chaque produit a son propre salon : présentation complète, tarifs et achat en un clic.\n\n" +
+      "Every product has its own channel — full details, pricing and one-click purchase.\n\n" +
       lines.join("\n"),
-    footer: `PaiPai • ${products.length} produits`,
+    footer: `PaiPai • ${products.length} products`,
   });
 
   await directoryChannel.send({ embeds: [embed], files: [logoAttachment()] });
