@@ -53,7 +53,37 @@ for (const file of fs.readdirSync(eventsPath).filter((f) => f.endsWith(".js"))) 
 // l'hebergeur. Sans CONTROL_KEY, la fonction ne fait rien.
 require("./control/server").start(client);
 
-client.login(process.env.BOT_TOKEN).catch((err) => {
-  console.error("❌ Connexion à Discord échouée — vérifie BOT_TOKEN dans .env.", err);
+// Sans ces ecouteurs, une connexion a la passerelle qui echoue en boucle reste
+// TOTALEMENT silencieuse : discord.js reessaie en interne et n'ecrit rien sur
+// la console. Symptome vecu en hebergement : le process tourne, aucun message,
+// et le bot reste hors ligne sans qu'on sache pourquoi.
+client.on("error", (err) => console.error("[discord] erreur client :", err.message));
+client.on("shardError", (err) => console.error("[discord] erreur passerelle :", err.message));
+client.on("warn", (msg) => console.warn("[discord]", msg));
+client.rest.on("rateLimited", (info) =>
+  console.warn(`[discord] limite de debit sur ${info.route} — attente ${info.timeToReset} ms`)
+);
+
+// Filet de securite : si la passerelle n'est pas prete au bout de 25 s, on dit
+// ou on en est plutot que de laisser l'utilisateur devant une console muette.
+const readyWatchdog = setTimeout(() => {
+  if (!client.isReady()) {
+    console.error(
+      "[discord] Toujours pas connecte apres 25 s. Causes probables : token invalide ou " +
+        "regenere, intent « Server Members » non active dans le portail developpeur, ou " +
+        "sortie reseau bloquee par l'hebergeur."
+    );
+  }
+}, 25000);
+client.once("clientReady", () => clearTimeout(readyWatchdog));
+client.once("ready", () => clearTimeout(readyWatchdog));
+
+const token = (process.env.BOT_TOKEN || "").trim();
+// Un token colle depuis un panel web arrive souvent avec des guillemets ou des
+// espaces : ils rendent le token invalide sans que le message d'erreur le dise.
+console.log(`[discord] Connexion avec un token de ${token.length} caracteres...`);
+
+client.login(token).catch((err) => {
+  console.error("❌ Connexion à Discord échouée — vérifie BOT_TOKEN dans .env.", err.message);
   process.exit(1);
 });
