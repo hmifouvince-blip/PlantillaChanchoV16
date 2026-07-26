@@ -1,0 +1,575 @@
+using Guna.UI2.WinForms;
+using Newtonsoft.Json.Linq;
+using PlantillaChanchoV16.Utilities;
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace PlantillaChanchoV16.Template
+{
+    // Bot Manager : pilote le bot Discord PaiPai depuis l'appli elle-meme.
+    // Calque visuel exact de WindowsPaiScreen.cs (meme fenetre borderless
+    // sakura, glow, drag, bannieres a accent). Deux volets independants :
+    // - Process local (node index.js) si un dossier est renseigne pour le profil actif ;
+    // - Actions API Discord directes (marchent meme sans process local).
+    internal class BotManagerScreen : Form
+    {
+        [DllImport("user32.dll")] private static extern bool ReleaseCapture();
+        [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+        // Cle = key discord-bot (config/products.js), Value = nom affiche.
+        private static readonly (string Key, string Name)[] Products =
+        {
+            ("woofer", "Woofer"),
+            ("valorant", "Valorant"),
+            ("roblox", "Roblox"),
+            ("windowspai", "Windows PaiPai"),
+        };
+
+        private static readonly BotProcessManager Proc = new BotProcessManager();
+
+        private Guna2ComboBox _profileCombo;
+        private Guna2Button _startStopBtn;
+        private Label _procStatus;
+        private TextBox _log;
+        private BotProfile? _active;
+
+        private const int Pad = 34;
+
+        public BotManagerScreen()
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            StartPosition = FormStartPosition.CenterScreen;
+            Size = new Size(840, 640);
+            BackColor = Colors.bgColor;
+            ShowInTaskbar = false;
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint
+                     | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            using (var p = Rounded(new Rectangle(0, 0, Width, Height), 14)) Region = new Region(p);
+
+            // En-tete.
+            MakeLbl("Pai", Color.White, new Font("Inter Semibold", 12f), new Point(Pad, 22), true);
+            float pW = TextRenderer.MeasureText("Pai", new Font("Inter Semibold", 12f)).Width;
+            MakeLbl("Pai", Colors.mainColor, new Font("Inter Semibold", 12f), new Point(Pad + (int)pW - 6, 22), true);
+            MakeLbl("Bot Manager", Colors.mainColor, new Font("Inter Semibold", 18f), new Point(Pad, 48), true);
+            MakeLbl("Control your Discord bot directly from PaiPai.", Color.FromArgb(170, 255, 255, 255),
+                new Font("Inter Medium", 10f), new Point(Pad, 80), true);
+
+            var close = new WindowButton(WindowButton.Glyph.Close, Color.FromArgb(255, 95, 87))
+            { Parent = this, Location = new Point(Width - 42, 18) };
+            close.Clicked += (s, e) => Close();
+
+            BuildProfileBar();
+            BuildProcessBanner();
+            BuildLogPanel();
+            BuildQuickActions();
+
+            LoadActiveProfile();
+            Proc.OutputReceived += line => AppendLog(line);
+            Proc.Exited += () => { BeginInvoke(new Action(() => { AppendLog("[process] Le bot s'est arrêté."); RefreshProcUi(); })); };
+
+            this.MouseDown += Drag;
+            this.FormClosed += (s, e) => { /* On laisse le bot tourner en arrière-plan si l'utilisateur ferme l'écran. */ };
+        }
+
+        // ---- Barre de profils (multi-bot) ----
+        private void BuildProfileBar()
+        {
+            var lbl = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "Active bot", ForeColor = Color.FromArgb(170, 255, 255, 255),
+                Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent,
+                Location = new Point(Pad, 106)
+            };
+
+            _profileCombo = new Guna2ComboBox
+            {
+                Parent = this, Location = new Point(Pad, 126), Size = new Size(Width - Pad * 2 - 320, 40),
+                FillColor = Colors.scColor, BorderColor = Colors.scColor, ForeColor = Color.White,
+                Font = new Font("Inter Medium", 10f), BorderRadius = 10,
+            };
+            _profileCombo.SelectedIndexChanged += (s, e) =>
+            {
+                if (_profileCombo.SelectedIndex < 0) return;
+                var profiles = BotProfileStore.GetAll();
+                if (_profileCombo.SelectedIndex >= profiles.Count) return;
+                var chosen = profiles[_profileCombo.SelectedIndex];
+                if (_active?.Id == chosen.Id) return;
+                if (Proc.IsRunning) Proc.Stop();
+                BotProfileStore.SetActive(chosen.Id);
+                _active = chosen;
+                RefreshProcUi();
+            };
+
+            int bx = Width - Pad - 300;
+            var addBtn = MakeSmallButton("+ Add", bx, 126, 90);
+            addBtn.Click += (s, e) =>
+            {
+                using var dlg = new BotProfileDialog(null);
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    BotProfileStore.AddOrUpdate(dlg.Result);
+                    BotProfileStore.SetActive(dlg.Result.Id);
+                    ReloadProfileCombo();
+                }
+            };
+
+            var editBtn = MakeSmallButton("Edit", bx + 96, 126, 90);
+            editBtn.Click += (s, e) =>
+            {
+                if (_active == null) return;
+                using var dlg = new BotProfileDialog(_active);
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    BotProfileStore.AddOrUpdate(dlg.Result);
+                    ReloadProfileCombo();
+                }
+            };
+
+            var delBtn = MakeSmallButton("Delete", bx + 192, 126, 100);
+            delBtn.ForeColor = Color.FromArgb(255, 120, 110);
+            delBtn.Click += (s, e) =>
+            {
+                if (_active == null) return;
+                var r = SakuraMessageBox.Show($"Delete bot profile \"{_active.Name}\"?", "Bot Manager", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (r != DialogResult.Yes) return;
+                if (Proc.IsRunning) Proc.Stop();
+                BotProfileStore.Delete(_active.Id);
+                ReloadProfileCombo();
+            };
+        }
+
+        private Guna2Button MakeSmallButton(string text, int x, int y, int width)
+        {
+            var b = new Guna2Button
+            {
+                Parent = this, Text = text, Font = new Font("Inter Semibold", 9.5f), ForeColor = Color.White,
+                FillColor = Colors.scColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(width, 40),
+                Location = new Point(x, y), Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
+            };
+            b.HoverState.FillColor = ControlPaint.Light(Colors.scColor, 0.3f);
+            return b;
+        }
+
+        private void ReloadProfileCombo()
+        {
+            var profiles = BotProfileStore.GetAll();
+            _profileCombo.Items.Clear();
+            foreach (var p in profiles) _profileCombo.Items.Add(p.Name);
+
+            _active = BotProfileStore.GetActive();
+            if (_active != null)
+            {
+                int idx = profiles.FindIndex(p => p.Id == _active.Id);
+                if (idx >= 0) _profileCombo.SelectedIndex = idx;
+            }
+            RefreshProcUi();
+        }
+
+        private void LoadActiveProfile()
+        {
+            ReloadProfileCombo();
+        }
+
+        // ---- Banniere de controle du process local ----
+        private Guna2Panel _banner;
+        private void BuildProcessBanner()
+        {
+            _banner = new Guna2Panel
+            {
+                Parent = this, Location = new Point(Pad, 178), Size = new Size(Width - Pad * 2, 62),
+                FillColor = Colors.scColor, BorderRadius = 12, BorderThickness = 0, UseTransparentBackground = true,
+                CustomBorderThickness = new Padding(3, 0, 0, 0), CustomBorderColor = Colors.mainColor
+            };
+            var icon = new StatusDot { Parent = _banner, Location = new Point(24, (62 - 20) / 2), Size = new Size(20, 20) };
+            _procStatus = new Label
+            {
+                Parent = _banner, Text = "No bot selected", ForeColor = Color.FromArgb(190, 255, 255, 255),
+                BackColor = Color.Transparent, Font = new Font("Inter Semibold", 10.5f), AutoSize = true,
+                Location = new Point(58, 20)
+            };
+
+            _startStopBtn = new Guna2Button
+            {
+                Parent = _banner, Text = "Start", Font = new Font("Inter Semibold", 10f), ForeColor = Color.White,
+                FillColor = Colors.mainColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(120, 40),
+                Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
+                Location = new Point(_banner.Width - 260, (62 - 40) / 2)
+            };
+            _startStopBtn.HoverState.FillColor = ControlPaint.Light(Colors.mainColor, 0.2f);
+            _startStopBtn.Click += (s, e) => ToggleProcess();
+
+            var restartBtn = new Guna2Button
+            {
+                Parent = _banner, Text = "Restart", Font = new Font("Inter Semibold", 10f), ForeColor = Color.White,
+                FillColor = Colors.scColor, BorderRadius = 9, BorderThickness = 0, Size = new Size(120, 40),
+                Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
+                Location = new Point(_banner.Width - 130, (62 - 40) / 2)
+            };
+            restartBtn.HoverState.FillColor = ControlPaint.Light(Colors.scColor, 0.3f);
+            restartBtn.Click += (s, e) =>
+            {
+                if (_active?.LocalFolderPath == null) return;
+                AppendLog("[process] Redémarrage…");
+                var (ok, error) = Proc.Restart(_active.LocalFolderPath);
+                if (!ok) AppendLog($"[erreur] {error}");
+                RefreshProcUi();
+            };
+        }
+
+        private void ToggleProcess()
+        {
+            if (_active == null) return;
+
+            if (Proc.IsRunning)
+            {
+                Proc.Stop();
+                AppendLog("[process] Bot arrêté.");
+                RefreshProcUi();
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_active.LocalFolderPath))
+            {
+                SakuraMessageBox.Show(
+                    "No local folder configured for this bot.\nEdit the profile and pick the bot's project folder (the one containing index.js) to enable Start/Stop.",
+                    "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            AppendLog("[process] Démarrage…");
+            var (ok, error) = Proc.Start(_active.LocalFolderPath!);
+            if (!ok) AppendLog($"[erreur] {error}");
+            RefreshProcUi();
+        }
+
+        private void RefreshProcUi()
+        {
+            if (_active == null)
+            {
+                _procStatus.Text = "No bot selected";
+                _procStatus.ForeColor = Color.FromArgb(150, 152, 168);
+                _startStopBtn.Enabled = false;
+                return;
+            }
+
+            _startStopBtn.Enabled = true;
+            bool running = Proc.IsRunning;
+            _procStatus.Text = running ? $"{_active.Name} — running" : $"{_active.Name} — stopped";
+            _procStatus.ForeColor = running ? Colors.mainColor : Color.FromArgb(190, 255, 255, 255);
+            _startStopBtn.Text = running ? "Stop" : "Start";
+            _startStopBtn.FillColor = running ? Colors.scColor : Colors.mainColor;
+            _startStopBtn.HoverState.FillColor = running ? ControlPaint.Light(Colors.scColor, 0.3f) : ControlPaint.Light(Colors.mainColor, 0.2f);
+            _banner.Invalidate();
+        }
+
+        // ---- Panneau de logs en direct ----
+        private void BuildLogPanel()
+        {
+            var lbl = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "Live console", ForeColor = Color.FromArgb(170, 255, 255, 255),
+                Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent,
+                Location = new Point(Pad, 250)
+            };
+
+            _log = new TextBox
+            {
+                Parent = this, Location = new Point(Pad, 270), Size = new Size(Width - Pad * 2, 200),
+                Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
+                BackColor = Colors.bgColor, ForeColor = Color.FromArgb(200, 255, 255, 255),
+                Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle,
+            };
+        }
+
+        private void AppendLog(string line)
+        {
+            if (_log.InvokeRequired) { _log.BeginInvoke(new Action(() => AppendLog(line))); return; }
+            _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {line}{Environment.NewLine}");
+        }
+
+        // ---- Actions rapides (API Discord directe) ----
+        private void BuildQuickActions()
+        {
+            var lbl = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "Quick actions", ForeColor = Color.FromArgb(170, 255, 255, 255),
+                Font = new Font("Inter Medium", 9f), AutoSize = true, BackColor = Color.Transparent,
+                Location = new Point(Pad, 484)
+            };
+
+            int y = 504, w = (Width - Pad * 2 - 30) / 4, h = 60;
+            BuildActionCard("📢", "Announcement", "Post in #announcements", new Point(Pad, y), w, h, async () => await DoAnnounce());
+            BuildActionCard("🆕", "Update", "Post in #updates", new Point(Pad + (w + 10) * 1, y), w, h, async () => await DoUpdate());
+            BuildActionCard("📊", "Status", "Edit #status", new Point(Pad + (w + 10) * 2, y), w, h, async () => await DoStatus());
+            BuildActionCard("🎫", "Tickets", "View open tickets", new Point(Pad + (w + 10) * 3, y), w, h, DoViewTickets);
+        }
+
+        private void BuildActionCard(string emoji, string title, string subtitle, Point loc, int w, int h, Action onClick)
+        {
+            var card = new Guna2Panel
+            {
+                Parent = this, Location = loc, Size = new Size(w, h),
+                FillColor = Colors.scColor, BorderRadius = 10, BorderThickness = 0,
+                UseTransparentBackground = true, Cursor = Cursors.Hand,
+                CustomBorderThickness = new Padding(3, 0, 0, 0), CustomBorderColor = Colors.mainColor
+            };
+            var e1 = new Label { Parent = card, Text = emoji, Font = new Font("Segoe UI Emoji", 14f), BackColor = Color.Transparent, AutoSize = true, Location = new Point(12, 8) };
+            var t1 = new Guna2HtmlLabel { Parent = card, Text = title, ForeColor = Color.White, Font = new Font("Inter Semibold", 10f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(12, 32) };
+            var t2 = new Guna2HtmlLabel { Parent = card, Text = subtitle, ForeColor = Color.FromArgb(150, 255, 255, 255), Font = new Font("Inter Medium", 8f), AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(12, 50) };
+
+            // Un clic sur n'importe quel enfant doit compter comme un clic sur la carte.
+            foreach (Control c in new Control[] { card, e1, t1, t2 })
+                c.Click += (s, e) => onClick();
+        }
+
+        private bool EnsureConnected(out string token, out string guildId)
+        {
+            token = ""; guildId = "";
+            if (_active == null)
+            {
+                SakuraMessageBox.Show("Add a bot profile first.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            token = BotProfileStore.Decrypt(_active.EncryptedTokenBase64);
+            guildId = _active.GuildId;
+            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(guildId))
+            {
+                SakuraMessageBox.Show("This profile's token or Guild ID is missing. Edit the profile first.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            return true;
+        }
+
+        private async Task DoAnnounce()
+        {
+            if (!EnsureConnected(out var token, out var guildId)) return;
+            using var dlg = new SakuraTwoFieldDialog("Post announcement", "Title", "Message");
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            string? channelId = await DiscordApi.FindTextChannelIdByName(token, guildId, "announcements");
+            if (channelId == null)
+            {
+                SakuraMessageBox.Show("#announcements channel not found on this server.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            var embed = DiscordApi.BuildEmbed($"📢 {dlg.TitleValue}", dlg.BodyValue, 0xE384AE, "PaiPai");
+            var result = await DiscordApi.PostMessage(token, channelId, embed, pingEveryone: false);
+            SakuraMessageBox.Show(result.Success ? "Announcement posted." : $"Failed: {result.Error}", "Bot Manager",
+                MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
+
+        private async Task DoUpdate()
+        {
+            if (!EnsureConnected(out var token, out var guildId)) return;
+            using var dlg = new SakuraTwoFieldDialog("Post update", "Title", "Description");
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            string? channelId = await DiscordApi.FindTextChannelIdByName(token, guildId, "updates");
+            if (channelId == null)
+            {
+                SakuraMessageBox.Show("#updates channel not found on this server.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            var embed = DiscordApi.BuildEmbed($"🆕 {dlg.TitleValue}", dlg.BodyValue, 0xE384AE, "PaiPai");
+            var result = await DiscordApi.PostMessage(token, channelId, embed, pingEveryone: false);
+            SakuraMessageBox.Show(result.Success ? "Update posted." : $"Failed: {result.Error}", "Bot Manager",
+                MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
+
+        private async Task DoStatus()
+        {
+            if (!EnsureConnected(out var token, out var guildId)) return;
+            using var dlg = new BotStatusDialog(Products.Select(p => p.Name).ToArray());
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            string productKey = Products.First(p => p.Name == dlg.SelectedProductName).Key;
+            string state = dlg.StateValue;
+
+            var storeData = TryReadLocalStore();
+            if (storeData?["statusMessage"] is JObject sm && sm["channelId"] != null && sm["messageId"] != null)
+            {
+                var productStatus = (storeData["productStatus"] as JObject) ?? new JObject();
+                productStatus[productKey] = state;
+                var embed = BuildStatusEmbed(productStatus);
+                var result = await DiscordApi.EditMessage(token, sm["channelId"]!.ToString(), sm["messageId"]!.ToString(), embed);
+                if (result.Success) WriteLocalProductStatus(productKey, state);
+                SakuraMessageBox.Show(result.Success ? "Status updated." : $"Failed: {result.Error}", "Bot Manager",
+                    MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+                return;
+            }
+
+            // Pas de dossier local / pas de message de statut suivi -> on ne peut pas
+            // savoir quel message editer. On prevdéfinit plutôt que de risquer un
+            // doublon silencieux.
+            var r = SakuraMessageBox.Show(
+                "No tracked status message found (needs the bot's local folder, or /setup-server was never run).\nPost a brand-new status message in #status instead?",
+                "Bot Manager", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (r != DialogResult.Yes) return;
+
+            string? channelId = await DiscordApi.FindTextChannelIdByName(token, guildId, "status");
+            if (channelId == null)
+            {
+                SakuraMessageBox.Show("#status channel not found on this server.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            var freshStatus = new JObject { [productKey] = state };
+            var freshEmbed = BuildStatusEmbed(freshStatus);
+            var postResult = await DiscordApi.PostMessage(token, channelId, freshEmbed);
+            SakuraMessageBox.Show(postResult.Success ? "New status message posted." : $"Failed: {postResult.Error}", "Bot Manager",
+                MessageBoxButtons.OK, postResult.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
+
+        private static JObject BuildStatusEmbed(JObject productStatus)
+        {
+            var labels = new Dictionary<string, string> { ["online"] = "🟢 Online", ["maintenance"] = "🟡 Maintenance", ["offline"] = "🔴 Offline" };
+            var sb = new StringBuilder();
+            foreach (var (key, name) in Products)
+            {
+                string state = productStatus[key]?.ToString() ?? "online";
+                sb.AppendLine($"**{name}** — {(labels.TryGetValue(state, out var lab) ? lab : labels["online"])}");
+            }
+            return DiscordApi.BuildEmbed("📊 PaiPai Product Status", sb.ToString().TrimEnd(), 0xE384AE, "PaiPai • Last updated");
+        }
+
+        private void DoViewTickets()
+        {
+            var storeData = TryReadLocalStore();
+            if (storeData == null)
+            {
+                SakuraMessageBox.Show(
+                    "No local folder configured for this bot (or data/store.json not found yet).\nEdit the profile and set the bot's project folder to view tickets.",
+                    "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var open = storeData["openTickets"] as JObject;
+            if (open == null || !open.Properties().Any())
+            {
+                new SakuraInfoDialog("Open tickets", "No open tickets right now.").ShowDialog(this);
+                return;
+            }
+
+            var sb = new StringBuilder();
+            int n = 1;
+            foreach (var prop in open.Properties())
+            {
+                var t = prop.Value;
+                string productKey = t["productKey"]?.ToString() ?? "?";
+                string userId = t["userId"]?.ToString() ?? "?";
+                string claimedBy = t["claimedBy"]?.ToString() ?? "";
+                string productName = Products.FirstOrDefault(p => p.Key == productKey).Name ?? productKey;
+                sb.AppendLine($"#{n} — channel {prop.Name}");
+                sb.AppendLine($"   product: {productName}");
+                sb.AppendLine($"   opened by user ID: {userId}");
+                sb.AppendLine($"   claimed by: {(string.IsNullOrEmpty(claimedBy) ? "(unclaimed)" : claimedBy)}");
+                sb.AppendLine();
+                n++;
+            }
+            new SakuraInfoDialog($"Open tickets ({open.Properties().Count()})", sb.ToString().TrimEnd()).ShowDialog(this);
+        }
+
+        // Lit data/store.json dans le dossier local du profil actif (si configure).
+        private JObject? TryReadLocalStore()
+        {
+            if (_active?.LocalFolderPath == null) return null;
+            string path = Path.Combine(_active.LocalFolderPath, "data", "store.json");
+            try
+            {
+                if (!File.Exists(path)) return null;
+                return JObject.Parse(File.ReadAllText(path));
+            }
+            catch { return null; }
+        }
+
+        private void WriteLocalProductStatus(string productKey, string state)
+        {
+            if (_active?.LocalFolderPath == null) return;
+            string path = Path.Combine(_active.LocalFolderPath, "data", "store.json");
+            try
+            {
+                var data = File.Exists(path) ? JObject.Parse(File.ReadAllText(path)) : new JObject();
+                if (data["productStatus"] is not JObject ps) { ps = new JObject(); data["productStatus"] = ps; }
+                ps[productKey] = state;
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, data.ToString());
+            }
+            catch { /* best-effort: le prochain /status-set du bot re-synchronisera de toute facon */ }
+        }
+
+        // ---- Pastille d'etat dessinee (vert = actif, gris = a l'arret) ----
+        private class StatusDot : Control
+        {
+            public StatusDot()
+            {
+                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint
+                         | ControlStyles.UserPaint | ControlStyles.SupportsTransparentBackColor, true);
+                DoubleBuffered = true;
+                BackColor = Color.Transparent;
+            }
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                bool running = Proc.IsRunning;
+                Color c = running ? Colors.mainColor : Color.FromArgb(120, 122, 138);
+                using (var glow = new SolidBrush(Color.FromArgb(60, c))) g.FillEllipse(glow, 0, 0, Width, Height);
+                using (var br = new SolidBrush(c)) g.FillEllipse(br, 4, 4, Width - 8, Height - 8);
+            }
+        }
+
+        private Label MakeLbl(string text, Color color, Font font, Point loc, bool drag)
+        {
+            var l = new Label { Parent = this, Text = text, ForeColor = color, BackColor = Color.Transparent, Font = font, AutoSize = true, Location = loc };
+            if (drag) l.MouseDown += Drag;
+            return l;
+        }
+
+        private void Drag(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left) { ReleaseCapture(); SendMessage(this.Handle, 0xA1, 0x2, 0); }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle rect = new Rectangle(0, 0, Width, Height);
+            using (var bg = new LinearGradientBrush(rect, Colors.bgColor, Color.FromArgb(46, 24, 40), LinearGradientMode.ForwardDiagonal))
+                g.FillRectangle(bg, rect);
+            using (var glow = new GraphicsPath())
+            {
+                glow.AddEllipse(Width - 240, -160, 340, 320);
+                using (var pgb = new PathGradientBrush(glow))
+                {
+                    pgb.CenterColor = Color.FromArgb(45, Colors.mainColor);
+                    pgb.SurroundColors = new[] { Color.FromArgb(0, Colors.mainColor) };
+                    g.FillPath(pgb, glow);
+                }
+            }
+            using (var path = Rounded(new Rectangle(0, 0, Width - 1, Height - 1), 14))
+            using (var pen = new Pen(Color.FromArgb(90, Colors.mainColor), 1f))
+                g.DrawPath(pen, path);
+        }
+
+        private static GraphicsPath Rounded(Rectangle r, int radius)
+        {
+            int d = radius * 2;
+            var path = new GraphicsPath();
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+    }
+}

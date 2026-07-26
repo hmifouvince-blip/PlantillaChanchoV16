@@ -20,6 +20,7 @@ namespace PlantillaChanchoV16.Utilities
             new Entry { SubscriptionName = "Valorant",   DisplayName = "Valorant",       GameKey = "valorant" },
             new Entry { SubscriptionName = "Roblox",     DisplayName = "Roblox",         GameKey = "roblox" },
             new Entry { SubscriptionName = "WindowsPai", DisplayName = "Windows PaiPai", GameKey = "windowspai" },
+            new Entry { SubscriptionName = "BotManager", DisplayName = "Bot Manager",    GameKey = "botmanager" },
         };
 
         public static Entry BySubscription(string subscriptionName)

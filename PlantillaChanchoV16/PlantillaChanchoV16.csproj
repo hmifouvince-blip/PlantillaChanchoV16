@@ -41,14 +41,14 @@
 		<AssemblyTitle>PaiPai</AssemblyTitle>
 		<Product>PaiPai</Product>
 		<Company>PaiPai</Company>
-		<Version>3.5.0.0</Version>
-		<AssemblyVersion>3.5.0.0</AssemblyVersion>
+		<Version>3.6.0.0</Version>
+		<AssemblyVersion>3.6.0.0</AssemblyVersion>
 		<!-- Sans ça, le SDK ajoute automatiquement le hash du commit Git à la "Version du
-		     produit" (ex: "3.5.0.0+d5c4d06...") -> a l'air d'un build de dev bricolé plutôt
+		     produit" (ex: "3.6.0.0+d5c4d06...") -> a l'air d'un build de dev bricolé plutôt
 		     que d'un vrai numéro de version, pas pro si l'utilisateur regarde les propriétés
 		     du fichier. -->
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-		<FileVersion>3.5.0.0</FileVersion>
+		<FileVersion>3.6.0.0</FileVersion>
 
 		<!-- GC "workstation" non-concurrent : empreinte mémoire plus faible. -->
 		<ServerGarbageCollection>false</ServerGarbageCollection>
@@ -385,6 +385,9 @@
     <PackageReference Include="InputSimulator" Version="1.0.4" />
     <PackageReference Include="Ionic.Zip" Version="1.9.1.8" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- DPAPI (chiffrement lie au compte Windows courant) pour stocker les tokens de
+         bot Discord du Bot Manager sans jamais les ecrire en clair sur le disque. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

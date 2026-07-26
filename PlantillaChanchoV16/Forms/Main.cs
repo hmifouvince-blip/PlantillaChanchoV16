@@ -207,6 +207,7 @@ namespace PlantillaChanchoV16
             _homeCarousel.AddCard(images.BgValorant, "Valorant", () => OpenGameDetails("valorant"));
             _homeCarousel.AddCard(images.BgRoblox, "Roblox", () => OpenGameDetails("roblox"));
             _homeCarousel.AddCard(images.Img2Anydesk, "Windows PaiPai", () => OpenGameDetails("windowspai"));
+            _homeCarousel.AddCard(images.Img2Anydesk, "Bot Manager", () => OpenGameDetails("botmanager"));
         }
 
 
@@ -2235,6 +2236,15 @@ namespace PlantillaChanchoV16
                 scr.ShowDialog(this);
         }
 
+        // Ouvre Bot Manager (pilotage du bot Discord), verrouillé par l'abonnement "BotManager".
+        private void OpenBotManager()
+        {
+            if (!RequireLicense("botmanager")) return;
+
+            using (var scr = new Template.BotManagerScreen())
+                scr.ShowDialog(this);
+        }
+
         // Verrou d'accès partagé (même logique pour tous les produits) : bloque l'ouverture
         // si la clé correspondante n'a pas été "claim" (ou a expiré), avec le même message
         // d'invite que Windows PaiPai. Renvoie true si l'accès est autorisé.
@@ -2288,6 +2298,13 @@ namespace PlantillaChanchoV16
             if (gameName == "windowspai")
             {
                 OpenWindowsPai();
+                return;
+            }
+
+            // Bot Manager : écran custom (pilotage du bot Discord), verrouillé par la clé.
+            if (gameName == "botmanager")
+            {
+                OpenBotManager();
                 return;
             }
 
