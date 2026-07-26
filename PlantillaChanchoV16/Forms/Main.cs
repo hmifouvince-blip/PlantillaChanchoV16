@@ -2394,9 +2394,11 @@ namespace PlantillaChanchoV16
                 return;
             }
 
-            // Tous les autres produits catalogués : même verrou (il faut avoir "claim" la clé
-            // via "Add license" avant de pouvoir seulement ouvrir la fiche produit).
-            if (!RequireLicense(gameName)) return;
+            // Plus de verrou A L'OUVERTURE : la fiche est une vitrine, tout le monde
+            // doit pouvoir la consulter. Le verrou vit maintenant sur le bouton
+            // d'action de la fiche, qui devient "GET ACCESS" et ouvre le dialogue de
+            // claim quand la licence manque. Bloquer ici affichait un avertissement
+            // puis ne montrait RIEN du produit.
 
             try
             {
@@ -2413,6 +2415,12 @@ namespace PlantillaChanchoV16
                 try
                 {
                     Template.ProductPage detailsForm = await gameDetailsFactory.GetGameDetails(this, gameName);
+
+                    // Cablage du claim : la fiche ne connait pas la fenetre principale.
+                    // Rebranche a chaque ouverture car les fiches sont mises en cache.
+                    detailsForm.ClaimRequested = () => _welcomeBanner?.ShowClaimDialog();
+                    detailsForm.RefreshAccess();
+
                     LoadDetailsFormInContainer(detailsForm);
                     detailsForm.BringToFront();
                     _contentForDetailsForm.BringToFront();

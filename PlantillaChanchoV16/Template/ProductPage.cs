@@ -61,12 +61,20 @@ namespace PlantillaChanchoV16.Template
         private Label _versionKey, _versionVal, _updateKey, _updateVal;
         private Guna2Button _launch;
         private Guna2HtmlLabel _report;
+        private Label _lockNote;
 
         private Guna2Panel _overlay;
         private Guna2PictureBox _overlayImage;
         private Guna2CircleButton _overlayClose;
 
         private int _activeTab, _activeShot;
+
+        // Nom de l'abonnement KeyAuth de ce produit : sert a savoir si LAUNCH doit
+        // lancer, ou proposer de reclamer une cle.
+        private readonly string _subscription;
+
+        // Branche par la fenetre principale : ouvre le dialogue de claim.
+        public Action ClaimRequested { get; set; }
 
         public ProductPage(
             string __subscriptionName,
@@ -105,6 +113,7 @@ namespace PlantillaChanchoV16.Template
                 .Select(f => (text: f.featureText, icon: f.icon, color: f.iconColor)).ToList();
             _linkDiscord = linkDiscord;
             _openProduct = openProduct;
+            _subscription = __subscriptionName ?? "";
 
             FormBorderStyle = FormBorderStyle.None;
             BackColor = Colors.bgColor;
@@ -299,7 +308,14 @@ namespace PlantillaChanchoV16.Template
             _launch.ShadowDecoration.Enabled = true;
             _launch.ShadowDecoration.Color = Color.FromArgb(120, Colors.mainColor);
             _launch.ShadowDecoration.Depth = 7;
-            _launch.Click += (s, e) => _openProduct?.Invoke();
+            _launch.Click += (s, e) =>
+            {
+                // Le verrou vit ICI, pas a l'ouverture de la fiche : on veut que
+                // tout le monde puisse consulter un produit, et que seul le
+                // LANCEMENT exige une licence valide.
+                if (HasAccess()) _openProduct?.Invoke();
+                else ClaimRequested?.Invoke();
+            };
 
             _report = new Guna2HtmlLabel
             {
@@ -314,9 +330,13 @@ namespace PlantillaChanchoV16.Template
             };
             _report.Click += (s, e) => { try { _utils.OpenLink(_linkDiscord); } catch { } };
 
+            _lockNote = MakeLbl("", Colors.textMuted, new Font("Inter Medium", 8.5f), _card);
+            _lockNote.Visible = false;
+
             BuildOverlay();
             SelectTab(0);
             SelectShot(0);
+            RefreshAccess();
         }
 
         private void BuildOverlay()
@@ -413,6 +433,30 @@ namespace PlantillaChanchoV16.Template
             return t;
         }
 
+        private bool HasAccess()
+            => string.IsNullOrEmpty(_subscription) || LicenseGate.HasValidSubscription(_subscription);
+
+        // Recalcule l'apparence du bouton d'action. Appelable de l'exterieur : la
+        // licence peut etre reclamee pendant que la fiche est ouverte.
+        public void RefreshAccess()
+        {
+            if (_launch == null) return;
+            bool owned = HasAccess();
+
+            _launch.Text = owned ? "LAUNCH" : "GET ACCESS";
+            _launch.Image = Utils.ChangeIconsColor(
+                new Bitmap(owned ? _images.PlayIcon : _images.KeyIcon), Color.White);
+            _launch.FillColor = owned ? Colors.mainColor : Color.FromArgb(70, 52, 70);
+            _launch.HoverState.FillColor = owned
+                ? ControlPaint.Light(Colors.mainColor, 0.22f)
+                : Color.FromArgb(96, 72, 96);
+            _launch.ShadowDecoration.Enabled = owned;
+
+            _lockNote.Text = owned ? "" : "Locked — claim a key to unlock this product.";
+            _lockNote.Visible = !owned;
+            Relayout();
+        }
+
         private void SelectShot(int index)
         {
             if (_shots.Length == 0) return;
@@ -498,7 +542,7 @@ namespace PlantillaChanchoV16.Template
             // On TIENT dans l'hote, on ne le deborde jamais : le faire grandir ne
             // ferait que deplacer le rognage.
             int hostW = (Parent != null && Parent.Width > 400) ? Parent.Width : Width;
-            int hostH = (Parent != null && Parent.Height > 300) ? Parent.Height : Height;
+            int hostH = VisibleHeight();
             if (Width != hostW || Height != hostH) { Size = new Size(hostW, hostH); }
 
             int contentW = hostW - Pad * 2;
@@ -566,7 +610,15 @@ namespace PlantillaChanchoV16.Template
 
             _launch.Width = innerW;
             _launch.Location = new Point(cx, bottom - _launch.Height);
-            bottom = _launch.Top - 16;
+            bottom = _launch.Top - 8;
+
+            if (_lockNote != null && _lockNote.Visible)
+            {
+                _lockNote.MaximumSize = new Size(innerW, 0);
+                _lockNote.Location = new Point(cx, bottom - _lockNote.Height);
+                bottom = _lockNote.Top - 8;
+            }
+            bottom -= 8;
 
             _updateKey.Location = new Point(cx, bottom - _updateKey.Height);
             _updateVal.Location = new Point(cx + innerW - _updateVal.Width, _updateKey.Top);
@@ -606,6 +658,29 @@ namespace PlantillaChanchoV16.Template
 
             LayoutOverlay();
             Invalidate(true);
+        }
+
+        // Hauteur REELLEMENT visible, pas celle du panneau hote.
+        //
+        // _contentForDetailsForm a une hauteur fixe (600) et debute sous la barre
+        // de navigation : dans une fenetre plus courte, son bas passe SOUS le bord
+        // de l'application. Se caler sur Parent.Height ancrait donc le bouton
+        // LAUNCH hors de l'ecran — invisible et incliquable.
+        private int VisibleHeight()
+        {
+            if (Parent == null) return Height;
+            int h = Parent.Height;
+            var top = Parent.TopLevelControl;
+            if (top != null)
+            {
+                try
+                {
+                    Point originInTop = top.PointToClient(Parent.PointToScreen(Point.Empty));
+                    h = Math.Min(h, top.ClientSize.Height - originInTop.Y);
+                }
+                catch { /* handle pas encore cree : on garde la hauteur du parent */ }
+            }
+            return Math.Max(300, h);
         }
 
         private void LayoutOverlay()
