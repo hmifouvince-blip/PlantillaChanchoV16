@@ -13,7 +13,7 @@ const {
   MessageFlags,
 } = require("discord.js");
 const branding = require("../config/branding");
-const products = require("../config/products");
+const catalog = require("../utils/catalog");
 const store = require("../utils/store");
 const { TICKETS_CATEGORY_NAME } = require("../config/serverStructure");
 
@@ -53,7 +53,9 @@ async function postTicketPanel(channel) {
 
 // Click on "Open a ticket" -> shows a dropdown (product / other).
 async function handleOpenTicketButton(interaction) {
-  const options = products.map((p) => ({ label: p.name, value: p.key }));
+  // Liste construite a CHAQUE ouverture : un produit cree depuis PaiPai
+  // apparait aussitot dans le menu, sans redemarrer le bot.
+  const options = catalog.list().map((p) => ({ label: p.name, value: p.key }));
   options.push({ label: "Other question", value: "other" });
 
   const menu = new StringSelectMenuBuilder()
@@ -74,7 +76,7 @@ async function handleOpenTicketButton(interaction) {
 // card (handleBuyProductButton) -> returns the created channel.
 async function createTicketChannel(interaction, reasonKey) {
   const guild = interaction.guild;
-  const product = products.find((p) => p.key === reasonKey);
+  const product = catalog.find(reasonKey);
   const reasonLabel = product ? product.name : "Other question";
 
   const staffRole = guild.roles.cache.find((r) => r.name === STAFF_ROLE_NAME);

@@ -131,6 +131,18 @@ namespace PlantillaChanchoV16.Utilities
             => SendAsync(HttpMethod.Post, baseUrl, auth, "/product-status",
                 new JObject { ["productKey"] = productKey, ["state"] = state });
 
+        // Catalogue produit du bot. C'est LUI qui fait autorite : il melange
+        // les produits ecrits dans son code et ceux crees depuis PaiPai, que
+        // l'application n'a aucun moyen de connaitre autrement.
+        public static Task<Result> Products(string baseUrl, Auth auth)
+            => SendAsync(HttpMethod.Get, baseUrl, auth, "/products");
+
+        // Creation ET edition : le bot distingue les deux a la cle. Les champs
+        // absents de l'objet gardent leur valeur actuelle -> on peut n'envoyer
+        // qu'une description sans effacer le reste.
+        public static Task<Result> SaveProduct(string baseUrl, Auth auth, JObject product)
+            => SendAsync(HttpMethod.Post, baseUrl, auth, "/product", product);
+
         // Publier VIA le bot (et non directement via l'API Discord) : la mise
         // en page riche vit dans paipai-discord-bot/utils/embeds.js, un seul
         // endroit. La reconstruire ici la ferait diverger au premier changement.

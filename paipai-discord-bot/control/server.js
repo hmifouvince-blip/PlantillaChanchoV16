@@ -13,12 +13,13 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 const util = require("node:util");
 const store = require("../utils/store");
-const products = require("../config/products");
+const catalog = require("../utils/catalog");
 const branding = require("../config/branding");
 const link = require("../features/link");
-const { buildStatusEmbed, logoAttachment } = require("../commands/status-set");
+const { refreshStatusMessage } = require("../commands/status-set");
 const { postAnnounce } = require("../commands/announce");
 const { postUpdate } = require("../commands/update-post");
+const { publishProduct } = require("../commands/post-products");
 
 const MAX_LINES = 300;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -268,32 +269,72 @@ async function handle(req, res, client) {
     const productKey = String(body.productKey || "");
     const state = String(body.state || "");
 
-    if (!products.some((p) => p.key === productKey)) {
+    if (!catalog.find(productKey)) {
       return send(400, { ok: false, error: `Unknown product: ${productKey}` });
     }
     if (!VALID_STATES.includes(state)) {
       return send(400, { ok: false, error: `Invalid state: ${state}` });
     }
 
-    const data = store.update((d) => {
+    store.update((d) => {
       d.productStatus[productKey] = state;
     });
 
-    if (!data.statusMessage) {
-      return send(409, { ok: false, error: "No tracked status page — run /setup-server first." });
+    const error = await refreshStatusMessage(client);
+    return error ? send(409, { ok: false, error }) : send(200, { ok: true });
+  }
+
+  // Catalogue produit lu en direct : c'est ce que PaiPai affiche dans
+  // l'ecran "Products" du Bot Manager.
+  if (req.method === "GET" && url.pathname === "/products") {
+    return send(200, { ok: true, products: catalog.listPublic() });
+  }
+
+  // Creation OU edition d'un produit depuis PaiPai. Le corps ne contient que
+  // les champs a changer ; ceux qui manquent gardent leur valeur.
+  // A la creation, le salon et le role du produit sont crees et sa fiche est
+  // publiee dans la foulee -> un produit cree depuis l'appli est visible sur
+  // le serveur sans aucune commande slash a taper.
+  if (req.method === "POST" && url.pathname === "/product") {
+    const body = await readJsonBody(req);
+    const result = catalog.upsert(body);
+    if (!result.ok) return send(400, result);
+
+    const product = result.product;
+    const response = { ok: true, created: result.created, product: catalog.toPublic(product), log: [] };
+
+    // publish: false -> on enregistre sans rien toucher sur Discord (utile
+    // pour preparer plusieurs modifications avant de les publier).
+    if (body.publish === false) {
+      console.log(`[control] Produit ${result.created ? "créé" : "modifié"} par ${caller.label} : ${product.name} (non publié).`);
+      return send(200, response);
     }
 
-    const channel = await client.channels.fetch(data.statusMessage.channelId).catch(() => null);
-    const message = channel
-      ? await channel.messages.fetch(data.statusMessage.messageId).catch(() => null)
-      : null;
+    const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
+    if (!guild) return send(409, { ...response, ok: false, error: "Discord server not found." });
 
-    if (!message) {
-      return send(409, { ok: false, error: "Status message not found — run /setup-server again." });
+    try {
+      const published = await publishProduct(guild, product, { created: result.created });
+      response.log = published.log;
+      response.channelId = published.channelId;
+    } catch (err) {
+      // Le produit EST enregistre : on le dit, sinon l'utilisateur croirait
+      // devoir tout ressaisir alors que seule la publication a echoue.
+      return send(409, {
+        ...response,
+        ok: false,
+        error: `Saved, but publishing failed: ${err.message}`,
+      });
     }
 
-    await message.edit({ embeds: [buildStatusEmbed(data.productStatus)], files: [logoAttachment()] });
-    return send(200, { ok: true });
+    // La page #status liste tous les produits : sans ce rafraichissement, un
+    // produit tout juste cree n'y apparaitrait pas.
+    const statusError = await refreshStatusMessage(client);
+    if (statusError) response.log.push(`⚠️ #status: ${statusError}`);
+    else response.log.push("✅ #status page refreshed");
+
+    console.log(`[control] Produit ${result.created ? "créé" : "modifié"} par ${caller.label} : ${product.name}.`);
+    return send(200, response);
   }
 
   return send(404, { ok: false, error: "Unknown route." });

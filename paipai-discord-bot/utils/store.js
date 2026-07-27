@@ -13,6 +13,17 @@ const DEFAULTS = {
   openTickets: {},
   // productKey -> "online" | "maintenance" | "offline"
   productStatus: {},
+
+  // Catalogue pilote depuis PaiPai (utils/catalog.js) :
+  // - productOverrides : cle d'un produit INTEGRE -> champs reecrits depuis
+  //   le Bot Manager (seuls les champs edites y figurent).
+  // - customProducts   : produits CREES depuis le Bot Manager, avec la meme
+  //   forme que config/products.js (sans image dediee).
+  // Ils vivent ici et non dans le code car l'hebergeur redeploie le code
+  // depuis Git a chaque mise a jour : un fichier de config modifie a chaud
+  // serait perdu, pas les donnees.
+  productOverrides: {},
+  customProducts: [],
   // id du message de la page de statut, pour l'EDITER au lieu d'en
   // reposter un nouveau a chaque /status-set.
   statusMessage: null, // { channelId, messageId }

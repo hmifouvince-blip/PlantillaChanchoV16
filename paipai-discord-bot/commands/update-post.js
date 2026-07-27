@@ -1,7 +1,7 @@
 // /update-post -> publie une entree de changelog dans #updates.
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require("discord.js");
 const { updateEmbed, filesFor } = require("../utils/embeds");
-const products = require("../config/products");
+const catalog = require("../utils/catalog");
 
 function findChannel(guild, name) {
   return guild.channels.cache.find((c) => c.type === ChannelType.GuildText && c.name === name) || null;
@@ -15,7 +15,7 @@ async function postUpdate(guild, { title, changelog, productKey, version, note, 
   const channel = findChannel(guild, "updates");
   if (!channel) return { ok: false, error: "#updates channel not found — run /setup-server." };
 
-  const product = productKey ? products.find((p) => p.key === productKey) || null : null;
+  const product = productKey ? catalog.find(productKey) : null;
   if (productKey && !product) return { ok: false, error: `Unknown product: ${productKey}` };
 
   // Le salon du produit peut ne pas exister (setup-server jamais lance, ou
@@ -59,7 +59,9 @@ module.exports = {
         .setName("product")
         .setDescription("Related product (optional)")
         .setRequired(false)
-        .addChoices(...products.map((p) => ({ name: p.name, value: p.key })))
+        // Choix figes a l'enregistrement des commandes (cf. status-set.js) :
+        // un produit cree depuis PaiPai n'apparait qu'apres un redemarrage.
+        .addChoices(...catalog.list().map((p) => ({ name: p.name, value: p.key })))
     )
     .addStringOption((opt) =>
       opt.setName("version").setDescription("Version number (e.g. v3.9)").setRequired(false)

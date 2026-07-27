@@ -142,6 +142,8 @@ localement.
 | `POST /restart` | Arrête le process ; l'hébergeur le relance |
 | `GET /store` | Contenu de `data/store.json` (tickets, statuts) |
 | `POST /product-status` | Change l'état d'un produit sur la page #statut |
+| `GET /products` | Le catalogue produit complet (intégrés + créés depuis PaiPai) |
+| `POST /product` | Crée ou modifie un produit, puis republie sa fiche |
 | `POST /announce` | Publie une annonce dans #announcements |
 | `POST /update` | Publie un changelog dans #updates |
 
@@ -182,11 +184,12 @@ l'application PaiPai.
 - **Changelog** : chaque ligne préfixée par `+` (ajout), `-` (retrait) ou
   `!` (correction) ressort colorée dans Discord. Sans préfixe, la ligne reste
   neutre.
-- **Tarifs, livraison, FAQ, site web** d'un produit : champs optionnels dans
-  `config/products.js`. Ils sont **vides par défaut** (ils s'affichent
-  publiquement, ils doivent donc venir de toi) et la section correspondante
-  est simplement omise tant qu'ils ne sont pas remplis. Après modification,
-  relance `/post-products`.
+- **Tarifs, livraison, FAQ, site web** d'un produit : champs optionnels. Ils
+  sont **vides par défaut** (ils s'affichent publiquement, ils doivent donc
+  venir de toi) et la section correspondante est simplement omise tant
+  qu'ils ne sont pas remplis. Remplis-les depuis PaiPai (Bot Manager →
+  **Products**) ou dans `config/products.js` puis `/post-products` — voir
+  « Modifier les produits présentés » plus bas.
 
 ## Commandes disponibles (réservées au Staff / Administrateur)
 
@@ -215,10 +218,37 @@ l'application PaiPai.
 
 ## Modifier les produits présentés
 
-Édite `config/products.js` (nom, description, image, statut par défaut),
-puis relance `/post-products` dans Discord pour republier les embeds à
-jour. Les images utilisées sont dans `assets/` (copiées depuis les
-visuels de l'application PaiPai pour rester cohérent).
+Deux chemins, au choix :
+
+**Depuis PaiPai (recommandé, aucun redéploiement).** Bot Manager →
+**Products** : la liste des produits arrive en direct du bot. `Edit` pour
+retoucher un texte (nom, tagline, description, tarifs, livraison, note,
+site), `+ New product` pour en créer un. À l'enregistrement, le bot
+republie la fiche du produit concerné, rafraîchit l'annuaire `#products`
+et la page `#status` ; à la création il crée aussi le salon du produit et
+le rôle correspondant. Demande un bot **hébergé** avec l'URL de contrôle
+renseignée (c'est le bot qui détient le catalogue).
+
+Ces modifications vivent dans `data/store.json` (`productOverrides` pour
+les produits intégrés, `customProducts` pour les créations) : elles
+**survivent à un redéploiement du code**, contrairement à un fichier de
+config édité à chaud chez l'hébergeur.
+
+⚠️ Un produit créé ici n'existe **que côté Discord** (fiche, salon, rôle,
+ticket). Il ne crée aucun abonnement KeyAuth ni aucune carte dans
+l'application PaiPai — ça reste à faire de ton côté.
+
+**Dans le code.** Édite `config/products.js` (nom, description, image,
+statut par défaut) puis relance `/post-products`. C'est le seul chemin
+pour donner un **visuel dédié** à un produit : les produits créés depuis
+PaiPai retombent sur le logo PaiPai, l'API de contrôle ne transporte pas
+de fichier image. Les images vivent dans `assets/` (copiées depuis les
+visuels de l'application pour rester cohérent).
+
+Note : les menus déroulants des commandes slash (`/status-set`,
+`/update-post`) sont figés à l'enregistrement des commandes — un produit
+créé depuis PaiPai n'y apparaît qu'après un **redémarrage** du bot. Le
+menu des tickets et le Bot Manager, eux, le voient immédiatement.
 
 ## Donner accès au Staff
 

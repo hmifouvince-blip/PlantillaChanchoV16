@@ -13,7 +13,7 @@ namespace PlantillaChanchoV16.Template
     // Bot Manager.
     internal class BotIcon : Control
     {
-        public enum Kind { Bot, Announcement, Update, Status, Tickets, Eye, EyeOff, Folder }
+        public enum Kind { Bot, Announcement, Update, Status, Tickets, Eye, EyeOff, Folder, Products }
 
         public Kind IconKind { get; set; }
 
@@ -90,6 +90,15 @@ namespace PlantillaChanchoV16.Template
                         g.DrawEllipse(pen, cx - 9, cy - 5, 18, 10);
                         g.FillEllipse(br, cx - 2, cy - 2, 4, 4);
                         g.DrawLine(pen, cx - 10, cy + 7, cx + 10, cy - 7);
+                        break;
+
+                    // Sac de courses : le glyphe le plus lisible a 40 px pour
+                    // « catalogue produit » (une etiquette ou un carton se
+                    // confondent avec l'icone Tickets a cette taille).
+                    case Kind.Products:
+                        using (var bag = Rounded(new Rectangle((int)(cx - 9), (int)(cy - 4), 18, 13), 3))
+                            g.DrawPath(pen, bag);
+                        g.DrawArc(pen, cx - 5, cy - 10, 10, 12, 180, 180);
                         break;
 
                     case Kind.Folder:

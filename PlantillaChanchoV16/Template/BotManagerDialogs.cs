@@ -1,10 +1,13 @@
 using Guna.UI2.WinForms;
+using Newtonsoft.Json.Linq;
 using PlantillaChanchoV16.Utilities;
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -604,6 +607,345 @@ namespace PlantillaChanchoV16.Template
             AcceptButton = ok;
             CancelButton = cancel;
             this.MouseDown += Drag;
+        }
+    }
+
+    // ---- Catalogue produit : liste + creation/edition ----
+    // Le catalogue vit CHEZ LE BOT (produits ecrits dans son code + produits
+    // crees depuis ici, stockes dans son store.json) : ce dialogue ne garde
+    // aucune copie locale, il relit la liste apres chaque enregistrement.
+    // Il fait lui-meme les appels reseau pour pouvoir afficher l'erreur exacte
+    // du bot et rafraichir la liste sans se refermer.
+    internal class BotProductsDialog : SakuraDialogBase
+    {
+        private readonly string _url;
+        private readonly BotRemoteApi.Auth _auth;
+        private readonly Guna2Panel _list;
+        private readonly Guna2HtmlLabel _feedback;
+        private readonly Guna2Button _newBtn;
+
+        // Vrai des qu'un produit a ete cree ou modifie -> l'ecran appelant
+        // recharge sa propre liste (menus Statut et Update).
+        public bool Changed { get; private set; }
+
+        public BotProductsDialog(string url, BotRemoteApi.Auth auth) : base(640, 580)
+        {
+            _url = url;
+            _auth = auth;
+
+            int pad = 30;
+            MakeWordmarkAndTitle("Products", pad);
+
+            var intro = new Guna2HtmlLabel
+            {
+                Parent = this,
+                Text = "Everything the bot shows on Discord. Changes are published right away.",
+                ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f),
+                AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false,
+                Location = new Point(pad, 82),
+            };
+
+            _newBtn = MakeButton("+ New product", true, 150, 40);
+            _newBtn.Location = new Point(Width - pad - _newBtn.Width, 62);
+            _newBtn.Click += async (s, e) => await EditProductAsync(null);
+
+            int listY = 116, listH = Height - listY - 96;
+            _list = new Guna2Panel
+            {
+                Parent = this, Location = new Point(pad, listY), Size = new Size(Width - pad * 2, listH),
+                FillColor = Colors.bgColor, BorderRadius = 10, BorderThickness = 0, AutoScroll = true,
+            };
+
+            _feedback = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "Loading…", ForeColor = Color.FromArgb(170, 255, 255, 255),
+                Font = new Font("Inter Medium", 9f), AutoSize = false, Size = new Size(Width - pad * 2 - 130, 40),
+                BackColor = Color.Transparent, IsSelectionEnabled = false,
+                Location = new Point(pad, listY + listH + 16),
+            };
+
+            var close = MakeButton("Close", false, 100);
+            close.Location = new Point(Width - pad - close.Width, listY + listH + 16);
+            close.Click += (s, e) => Close();
+
+            CancelButton = close;
+            this.MouseDown += Drag;
+            this.Shown += async (s, e) => await ReloadAsync();
+        }
+
+        private async Task ReloadAsync()
+        {
+            Say("Loading…", error: false);
+            var result = await BotRemoteApi.Products(_url, _auth);
+            if (IsDisposed) return;
+
+            if (!result.Success)
+            {
+                Say(result.Error ?? "Could not read the product list.", error: true);
+                return;
+            }
+
+            var products = result.Data?["products"] as JArray ?? new JArray();
+            BuildRows(products);
+            Say($"{products.Count} product(s).", error: false);
+        }
+
+        private void BuildRows(JArray products)
+        {
+            _list.Controls.Clear();
+
+            int rowH = 62, gap = 8, y = 8;
+            // Largeur reduite de la barre de defilement : sans cette marge, la
+            // derniere carte passe SOUS la barre des que la liste depasse.
+            int rowW = _list.Width - 16 - SystemInformation.VerticalScrollBarWidth;
+
+            foreach (var item in products.OfType<JObject>())
+            {
+                string key = (string?)item["key"] ?? "";
+                string name = (string?)item["name"] ?? key;
+                string emoji = (string?)item["emoji"] ?? "";
+                string channel = (string?)item["channelName"] ?? "";
+                string status = (string?)item["status"] ?? "online";
+                bool builtin = (bool?)item["builtin"] ?? false;
+
+                var row = new Guna2Panel
+                {
+                    Parent = _list, Location = new Point(8, y), Size = new Size(rowW, rowH),
+                    FillColor = Colors.scColor, BorderRadius = 10, BorderThickness = 0,
+                    CustomBorderThickness = new Padding(3, 0, 0, 0), CustomBorderColor = StatusColor(status),
+                };
+
+                new Guna2HtmlLabel
+                {
+                    Parent = row, Text = $"{emoji} {name}".Trim(), ForeColor = Color.White,
+                    Font = new Font("Inter Semibold", 10f), AutoSize = true, BackColor = Color.Transparent,
+                    IsSelectionEnabled = false, Location = new Point(16, 11),
+                };
+                new Guna2HtmlLabel
+                {
+                    Parent = row, Text = $"#{channel} • {status}{(builtin ? "" : " • created from PaiPai")}",
+                    ForeColor = Color.FromArgb(150, 255, 255, 255), Font = new Font("Inter Medium", 8f),
+                    AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false,
+                    Location = new Point(16, 33),
+                };
+
+                var edit = new Guna2Button
+                {
+                    Parent = row, Text = "Edit", Font = new Font("Inter Semibold", 9f), ForeColor = Color.White,
+                    FillColor = Colors.bgColor, BorderRadius = 8, BorderThickness = 0, Size = new Size(74, 34),
+                    Cursor = Cursors.Hand, Animated = true,
+                };
+                edit.Location = new Point(rowW - 16 - edit.Width, (rowH - edit.Height) / 2);
+                edit.HoverState.FillColor = ControlPaint.Light(Colors.bgColor, 0.3f);
+                var captured = item;
+                edit.Click += async (s, e) => await EditProductAsync(captured);
+
+                y += rowH + gap;
+            }
+        }
+
+        private static Color StatusColor(string status) => status switch
+        {
+            "maintenance" => Color.FromArgb(235, 200, 120),
+            "offline" => Color.FromArgb(255, 130, 120),
+            _ => Colors.mainColor,
+        };
+
+        private async Task EditProductAsync(JObject? existing)
+        {
+            using var dlg = new BotProductDialog(existing);
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            _newBtn.Enabled = false;
+            Say(existing == null ? "Creating the product…" : "Saving…", error: false);
+
+            var result = await BotRemoteApi.SaveProduct(_url, _auth, dlg.Payload);
+            if (IsDisposed) return;
+            _newBtn.Enabled = true;
+
+            if (!result.Success)
+            {
+                Say(result.Error ?? "Save failed.", error: true);
+                return;
+            }
+
+            Changed = true;
+            await ReloadAsync();
+            if (IsDisposed) return;
+
+            // Le journal vient du bot (salon cree, fiche postee, annuaire et
+            // page de statut rafraichis) : c'est la seule confirmation que la
+            // publication est reellement passee cote Discord.
+            var log = result.Data?["log"] as JArray;
+            string details = log == null ? "" : string.Join(Environment.NewLine, log.Select(l => l.ToString()));
+            using var info = new SakuraInfoDialog(
+                (bool?)result.Data?["created"] == true ? "Product created" : "Product updated",
+                details.Length > 0 ? details : "Saved.");
+            info.ShowDialog(this);
+        }
+
+        private void Say(string text, bool error)
+        {
+            _feedback.ForeColor = error ? Color.FromArgb(255, 130, 120) : Color.FromArgb(170, 255, 255, 255);
+            _feedback.Text = text;
+        }
+    }
+
+    // ---- Formulaire d'un produit (creation ou edition) ----
+    // Ne parle PAS au reseau : il produit juste le corps JSON, envoye par
+    // BotProductsDialog. Les champs laisses vides sont envoyes vides (donc
+    // effaces cote bot) : c'est voulu, vider un champ doit retirer la section
+    // correspondante de la fiche Discord.
+    internal class BotProductDialog : SakuraDialogBase
+    {
+        private readonly Guna2TextBox _name, _emoji, _key, _tagline, _description, _prices, _delivery, _website, _note;
+        private readonly bool _isNew;
+        private readonly string _existingKey;
+
+        public JObject Payload { get; private set; } = new JObject();
+
+        public BotProductDialog(JObject? existing) : base(580, 820)
+        {
+            _isNew = existing == null;
+            _existingKey = (string?)existing?["key"] ?? "";
+
+            int pad = 30;
+            int fieldW = Width - pad * 2;
+            int halfW = (fieldW - 12) / 2;
+            MakeWordmarkAndTitle(_isNew ? "New product" : "Edit product", pad);
+
+            int y = 94;
+            MakeFieldLabel("Name", pad, y);
+            _name = MakeTextBox("e.g. PaiPai Val + Emulator", new Point(pad, y + 20), new Size(fieldW - 100, 44));
+            MakeFieldLabel("Emoji", pad + fieldW - 88, y);
+            _emoji = MakeTextBox("🌸", new Point(pad + fieldW - 88, y + 20), new Size(88, 44));
+
+            y += 86;
+            MakeFieldLabel(_isNew ? "Key & channel — leave empty to derive it from the name" : "Key (fixed)", pad, y);
+            _key = MakeTextBox("e.g. valorant", new Point(pad, y + 20), new Size(170, 44));
+            // La cle nomme le salon Discord du produit : la changer apres coup
+            // casserait les liens deja publies -> lecture seule en edition.
+            _key.ReadOnly = !_isNew;
+            if (!_isNew) _key.ForeColor = Color.FromArgb(150, 255, 255, 255);
+
+            MakeFieldLabel("Tagline — the italic line above the description", pad + 182, y);
+            _tagline = MakeTextBox("e.g. Every round, under control.", new Point(pad + 182, y + 20), new Size(fieldW - 182, 44));
+
+            y += 86;
+            MakeFieldLabel("Description — supports **bold** and • bullets", pad, y);
+            _description = MakeMultiline(new Point(pad, y + 20), new Size(fieldW, 150));
+
+            y += 192;
+            MakeFieldLabel("Pricing — one per line:   1 month = 15 €", pad, y);
+            _prices = MakeMultiline(new Point(pad, y + 20), new Size(fieldW, 76));
+
+            y += 118;
+            MakeFieldLabel("Delivery (optional)", pad, y);
+            _delivery = MakeTextBox("e.g. Instant, in your ticket", new Point(pad, y + 20), new Size(halfW, 44));
+            MakeFieldLabel("Website (optional)", pad + halfW + 12, y);
+            _website = MakeTextBox("https://…", new Point(pad + halfW + 12, y + 20), new Size(halfW, 44));
+
+            y += 86;
+            MakeFieldLabel("Warning note (optional) — shown in bold on the card", pad, y);
+            _note = MakeTextBox("e.g. Disable your antivirus before launching", new Point(pad, y + 20), new Size(fieldW, 44));
+
+            if (existing != null) Fill(existing);
+
+            int buttonsY = y + 20 + 44 + 26;
+            var ok = MakeButton(_isNew ? "Create" : "Save", true, 120);
+            ok.Location = new Point(Width - pad - ok.Width, buttonsY);
+            ok.Click += (s, e) => Submit();
+
+            var cancel = MakeButton("Cancel", false, 100);
+            cancel.Location = new Point(ok.Left - cancel.Width - 10, buttonsY);
+            cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+
+            CancelButton = cancel;
+            this.MouseDown += Drag;
+        }
+
+        private Guna2TextBox MakeMultiline(Point loc, Size size)
+        {
+            var tb = new Guna2TextBox
+            {
+                Parent = this, Location = loc, Size = size, Multiline = true, BorderRadius = 10,
+                FillColor = Colors.scColor, BorderColor = Colors.scColor, ForeColor = Color.White,
+                Font = new Font("Inter Medium", 10f), Animated = true, ScrollBars = ScrollBars.Vertical,
+                AcceptsReturn = true,
+            };
+            tb.FocusedState.BorderColor = Colors.mainColor;
+            return tb;
+        }
+
+        private void Fill(JObject p)
+        {
+            _key.Text = (string?)p["key"] ?? "";
+            _name.Text = (string?)p["name"] ?? "";
+            _emoji.Text = (string?)p["emoji"] ?? "";
+            _tagline.Text = (string?)p["tagline"] ?? "";
+            // Le bot renvoie des sauts de ligne \n : sans conversion, un
+            // TextBox Windows les affiche tous colles sur une seule ligne.
+            _description.Text = ToBox((string?)p["description"]);
+            _delivery.Text = (string?)p["delivery"] ?? "";
+            _website.Text = (string?)p["website"] ?? "";
+            _note.Text = (string?)p["note"] ?? "";
+
+            var sb = new StringBuilder();
+            foreach (var price in (p["prices"] as JArray ?? new JArray()).OfType<JObject>())
+                sb.AppendLine($"{(string?)price["label"]} = {(string?)price["price"]}");
+            _prices.Text = sb.ToString().TrimEnd();
+        }
+
+        private static string ToBox(string? text)
+            => (text ?? "").Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
+
+        private static string ToJson(string text)
+            => text.Replace("\r\n", "\n").Trim();
+
+        private void Submit()
+        {
+            string name = _name.Text.Trim();
+            if (name.Length == 0)
+            {
+                SakuraMessageBox.Show("Name is required.", "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var prices = new JArray();
+            foreach (string line in _prices.Text.Split('\n'))
+            {
+                string row = line.Trim();
+                if (row.Length == 0) continue;
+                int sep = row.IndexOfAny(new[] { '=', '|' });
+                if (sep <= 0 || sep == row.Length - 1)
+                {
+                    SakuraMessageBox.Show(
+                        $"Pricing line not understood:\n{row}\n\nUse: label = price   (e.g. 1 month = 15 €)",
+                        "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                prices.Add(new JObject
+                {
+                    ["label"] = row.Substring(0, sep).Trim(),
+                    ["price"] = row.Substring(sep + 1).Trim(),
+                });
+            }
+
+            Payload = new JObject
+            {
+                ["key"] = _isNew ? _key.Text.Trim() : _existingKey,
+                ["name"] = name,
+                ["emoji"] = _emoji.Text.Trim(),
+                ["tagline"] = _tagline.Text.Trim(),
+                ["description"] = ToJson(_description.Text),
+                ["prices"] = prices,
+                ["delivery"] = _delivery.Text.Trim(),
+                ["website"] = _website.Text.Trim(),
+                ["note"] = _note.Text.Trim(),
+            };
+
+            DialogResult = DialogResult.OK;
+            Close();
         }
     }
 

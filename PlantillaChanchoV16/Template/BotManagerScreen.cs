@@ -32,8 +32,11 @@ namespace PlantillaChanchoV16.Template
         [DllImport("user32.dll")] private static extern bool ReleaseCapture();
         [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
 
-        // Cle = key discord-bot (config/products.js), Value = nom affiche.
-        private static readonly (string Key, string Name)[] Products =
+        // Repli SEULEMENT : le vrai catalogue vient du bot (GET /products), qui
+        // seul connait les produits crees depuis le Bot Manager. Cette liste
+        // sert tant qu'aucun bot n'est joignable (profil local, hebergeur
+        // eteint) pour que les menus ne soient jamais vides.
+        private static readonly (string Key, string Name)[] DefaultProducts =
         {
             ("woofer", "Woofer"),
             ("valorant", "PaiPai Val + Emulator"),
@@ -58,6 +61,11 @@ namespace PlantillaChanchoV16.Template
         private long _lastLogSeq;
         private bool _pollBusy;
 
+        // Catalogue produit servant aux menus (Update, Status, Tickets).
+        // Recharge depuis le bot des qu'il repond, une seule fois par profil.
+        private List<(string Key, string Name)> _products = DefaultProducts.ToList();
+        private bool _productsLoaded;
+
         private bool IsRemote => _active != null && !string.IsNullOrWhiteSpace(_active.RemoteUrl);
         private string RemoteUrl => _active?.RemoteUrl ?? "";
 
@@ -74,7 +82,7 @@ namespace PlantillaChanchoV16.Template
         {
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterScreen;
-            Size = new Size(880, 760);
+            Size = new Size(880, 878);
             BackColor = Colors.bgColor;
             ShowInTaskbar = false;
             DoubleBuffered = true;
@@ -217,6 +225,10 @@ namespace PlantillaChanchoV16.Template
                 // Les numeros de ligne repartent de zero d'un bot a l'autre :
                 // sans ce reset, la console melangerait les deux flux.
                 _lastLogSeq = 0;
+                // Chaque bot a son propre catalogue -> celui deja charge ne
+                // vaut plus rien.
+                _productsLoaded = false;
+                _products = DefaultProducts.ToList();
                 _log.Clear();
                 RefreshProcUi();
                 StartOrStopPolling();
@@ -478,6 +490,15 @@ namespace PlantillaChanchoV16.Template
                 ApplyRemoteHealth(health);
                 if (!health.Success) return;
 
+                // Au premier contact seulement : le catalogue ne bouge pas
+                // toutes les 3 s, inutile de le redemander a chaque tick.
+                if (!_productsLoaded)
+                {
+                    _productsLoaded = true;
+                    await RefreshProductsAsync();
+                    if (IsDisposed || !IsRemote) return;
+                }
+
                 var logs = await BotRemoteApi.Logs(url, auth, _lastLogSeq);
                 if (IsDisposed || !IsRemote) return;
                 if (logs.Success && logs.Data?["lines"] is JArray lines)
@@ -499,6 +520,24 @@ namespace PlantillaChanchoV16.Template
             {
                 _pollBusy = false;
             }
+        }
+
+        // Recharge la liste des produits depuis le bot. En cas d'echec on garde
+        // la liste precedente : des menus vides seraient pires qu'une liste
+        // legerement perimee.
+        private async Task RefreshProductsAsync()
+        {
+            if (!IsRemote) return;
+
+            var result = await BotRemoteApi.Products(RemoteUrl, RemoteAuth);
+            if (IsDisposed || !result.Success || result.Data?["products"] is not JArray items) return;
+
+            var list = items.OfType<JObject>()
+                .Select(p => ((string?)p["key"] ?? "", (string?)p["name"] ?? ""))
+                .Where(p => p.Item1.Length > 0 && p.Item2.Length > 0)
+                .ToList();
+
+            if (list.Count > 0) _products = list;
         }
 
         private void ApplyRemoteHealth(BotRemoteApi.Result result)
@@ -590,6 +629,11 @@ namespace PlantillaChanchoV16.Template
             BuildActionCard(BotIcon.Kind.Update, "Update", "→ #updates", new Point(Pad + (w + gap) * 1, rowY), w, h, async () => await DoUpdate());
             BuildActionCard(BotIcon.Kind.Status, "Status", "→ #status", new Point(Pad + (w + gap) * 2, rowY), w, h, async () => await DoStatus());
             BuildActionCard(BotIcon.Kind.Tickets, "Tickets", "Open list", new Point(Pad + (w + gap) * 3, rowY), w, h, async () => await DoViewTickets());
+
+            // 2e rangee, carte pleine largeur : a cinq cartes sur une seule
+            // rangee, le libelle « Announcement » ne tient plus dans sa carte.
+            BuildActionCard(BotIcon.Kind.Products, "Products", "Create a product or edit its description",
+                new Point(Pad, rowY + h + gap), contentW, h, async () => await DoProducts());
         }
 
         private void BuildActionCard(BotIcon.Kind kind, string title, string subtitle, Point loc, int w, int h, Action onClick)
@@ -667,11 +711,33 @@ namespace PlantillaChanchoV16.Template
             Report(result.Success, "Announcement posted.", result.Error);
         }
 
+        // Catalogue produit : creation et edition des fiches Discord. Reserve
+        // au mode distant -- le catalogue (y compris les produits crees ici)
+        // vit chez le bot, l'API Discord seule ne saurait ni le lire ni
+        // l'ecrire.
+        private async Task DoProducts()
+        {
+            if (!IsRemote)
+            {
+                SakuraMessageBox.Show(
+                    "The product catalog lives in the bot itself.\nConnect to a hosted bot first — \"Link Discord\", or set a control URL in the profile.",
+                    "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var dlg = new BotProductsDialog(RemoteUrl, RemoteAuth);
+            dlg.ShowDialog(this);
+
+            // Un produit cree/renomme doit apparaitre tout de suite dans les
+            // menus Update et Status, sans rouvrir l'ecran.
+            if (dlg.Changed) await RefreshProductsAsync();
+        }
+
         private async Task DoUpdate()
         {
             if (!IsRemote && !EnsureConnected(out _, out _)) return;
 
-            using var dlg = new BotUpdateDialog(Products);
+            using var dlg = new BotUpdateDialog(_products.ToArray());
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
             if (IsRemote)
@@ -711,10 +777,10 @@ namespace PlantillaChanchoV16.Template
         {
             if (!IsRemote && !EnsureConnected(out _, out _)) return;
 
-            using var dlg = new BotStatusDialog(Products.Select(p => p.Name).ToArray());
+            using var dlg = new BotStatusDialog(_products.Select(p => p.Name).ToArray());
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-            string productKey = Products.First(p => p.Name == dlg.SelectedProductName).Key;
+            string productKey = _products.First(p => p.Name == dlg.SelectedProductName).Key;
             string state = dlg.StateValue;
 
             // Bot hébergé : c'est LUI qui édite son message de statut. Il est le
@@ -762,11 +828,11 @@ namespace PlantillaChanchoV16.Template
                 MessageBoxButtons.OK, postResult.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         }
 
-        private static JObject BuildStatusEmbed(JObject productStatus)
+        private JObject BuildStatusEmbed(JObject productStatus)
         {
             var labels = new Dictionary<string, string> { ["online"] = "🟢 Online", ["maintenance"] = "🟡 Maintenance", ["offline"] = "🔴 Offline" };
             var sb = new StringBuilder();
-            foreach (var (key, name) in Products)
+            foreach (var (key, name) in _products)
             {
                 string state = productStatus[key]?.ToString() ?? "online";
                 sb.AppendLine($"**{name}** — {(labels.TryGetValue(state, out var lab) ? lab : labels["online"])}");
@@ -798,10 +864,17 @@ namespace PlantillaChanchoV16.Template
             foreach (var prop in open.Properties())
             {
                 var t = prop.Value;
-                string productKey = t["productKey"]?.ToString() ?? "?";
+                string productKey = t["productKey"]?.ToString() ?? "";
                 string userId = t["userId"]?.ToString() ?? "?";
                 string claimedBy = t["claimedBy"]?.ToString() ?? "";
-                string productName = Products.FirstOrDefault(p => p.Key == productKey).Name ?? productKey;
+                // Le bot enregistre le LIBELLE du motif (reasonLabel), pas la
+                // cle : un ticket « Other question » n'a d'ailleurs aucun
+                // produit. La cle n'est lue qu'en repli, pour les tickets
+                // ecrits par une ancienne version du bot.
+                string productName = t["reasonLabel"]?.ToString()
+                    ?? (productKey.Length > 0
+                        ? _products.FirstOrDefault(p => p.Key == productKey).Name ?? productKey
+                        : "?");
                 sb.AppendLine($"#{n} — channel {prop.Name}");
                 sb.AppendLine($"   product: {productName}");
                 sb.AppendLine($"   opened by user ID: {userId}");

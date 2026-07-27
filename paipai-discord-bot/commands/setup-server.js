@@ -9,19 +9,20 @@ const {
   EmbedBuilder,
   MessageFlags,
 } = require("discord.js");
-const { ROLES, CATEGORIES, TICKETS_CATEGORY_NAME, PRODUCTS_CATEGORY_NAME } = require("../config/serverStructure");
+const { ROLES, CATEGORIES, TICKETS_CATEGORY_NAME } = require("../config/serverStructure");
 const branding = require("../config/branding");
-const products = require("../config/products");
+const catalog = require("../utils/catalog");
 const verification = require("../features/verification");
 const tickets = require("../features/tickets");
+const {
+  resolvePermValue,
+  buildOverwrites,
+  ensureProductsCategory,
+  ensureProductChannel,
+  ensureProductRole,
+} = require("../features/productChannels");
 const { postProductCard, postDirectory } = require("./post-products");
 const { ensureStatusMessage } = require("./status-set");
-
-function resolvePermValue(name) {
-  const v = PermissionFlagsBits[name];
-  if (v === undefined) throw new Error(`Unknown permission: ${name}`);
-  return v;
-}
 
 async function ensureRoles(guild, log) {
   const created = {};
@@ -44,17 +45,6 @@ async function ensureRoles(guild, log) {
     created[roleDef.name] = role;
   }
   return created;
-}
-
-function buildOverwrites(guild, roles, overwriteDefs) {
-  return overwriteDefs.map((ow) => {
-    const roleId = ow.role === "everyone" ? guild.roles.everyone.id : roles[ow.role]?.id;
-    return {
-      id: roleId,
-      allow: (ow.allow || []).map(resolvePermValue),
-      deny: (ow.deny || []).map(resolvePermValue),
-    };
-  });
 }
 
 async function ensureCategoriesAndChannels(guild, roles, log) {
@@ -104,72 +94,22 @@ async function ensureCategoriesAndChannels(guild, roles, log) {
   return channelsByName;
 }
 
-// Creates the "🛍️ PRODUCTS" category (if missing) and one channel per
-// product from config/products.js (if missing) -> same Member-only,
-// read-only-for-members visibility pattern as the other PaiPai channels.
-// Returns { productKey: channel }.
+// Un salon par produit du CATALOGUE (produits integres + ceux crees depuis
+// PaiPai), dans la categorie "🛍️ PRODUCTS". Retourne { productKey: channel }.
 async function ensureProductChannels(guild, roles, log) {
-  let category = guild.channels.cache.find(
-    (c) => c.type === ChannelType.GuildCategory && c.name === PRODUCTS_CATEGORY_NAME
-  );
-  if (!category) {
-    category = await guild.channels.create({ name: PRODUCTS_CATEGORY_NAME, type: ChannelType.GuildCategory });
-    log.push(`✅ Category created: **${PRODUCTS_CATEGORY_NAME}**`);
-  } else {
-    log.push(`↪️ Category already present: **${PRODUCTS_CATEGORY_NAME}**`);
-  }
-
-  const overwriteDefs = [
-    { role: "everyone", deny: ["ViewChannel", "SendMessages"] },
-    { role: "Unverified", deny: ["ViewChannel"] },
-    { role: "Member", allow: ["ViewChannel"], deny: ["SendMessages"] },
-  ];
+  const category = await ensureProductsCategory(guild, log);
 
   const channelsByProductKey = {};
-  for (const product of products) {
-    let channel = guild.channels.cache.find(
-      (c) => c.type === ChannelType.GuildText && c.name === product.channelName && c.parentId === category.id
-    );
-    if (!channel) {
-      channel = await guild.channels.create({
-        name: product.channelName,
-        type: ChannelType.GuildText,
-        parent: category.id,
-        topic: `${product.name} — ${product.tagline}`,
-        permissionOverwrites: buildOverwrites(guild, roles, overwriteDefs),
-      });
-      log.push(`✅ Channel created: **#${product.channelName}**`);
-    } else {
-      log.push(`↪️ Channel already present: **#${product.channelName}**`);
-    }
-    channelsByProductKey[product.key] = channel;
+  for (const product of catalog.list()) {
+    channelsByProductKey[product.key] = await ensureProductChannel(guild, product, log, roles, category);
   }
-
   return channelsByProductKey;
 }
 
-// Creates one role per product (named after the product itself, e.g.
-// "Woofer") if missing -> useful to tag/recognize customers who bought
-// that specific product. Simple recognition roles: no special permissions.
+// Un role par produit (nomme comme le produit, ex. "Woofer") : sert a reperer
+// les acheteurs. Aucune permission particuliere.
 async function ensureProductRoles(guild, log) {
-  const rolesByProductKey = {};
-  for (const product of products) {
-    let role = guild.roles.cache.find((r) => r.name === product.name);
-    if (!role) {
-      role = await guild.roles.create({
-        name: product.name,
-        colors: { primaryColor: branding.colors.main },
-        hoist: false,
-        mentionable: false,
-        permissions: [],
-      });
-      log.push(`✅ Role created: **${product.name}**`);
-    } else {
-      log.push(`↪️ Role already present: **${product.name}**`);
-    }
-    rolesByProductKey[product.key] = role;
-  }
-  return rolesByProductKey;
+  for (const product of catalog.list()) await ensureProductRole(guild, product, log);
 }
 
 // A channel is considered "empty" (never initialized by the bot) if it has
@@ -220,7 +160,7 @@ async function runSetup(guild) {
   }
 
   const productChannels = await ensureProductChannels(guild, roles, log);
-  for (const product of products) {
+  for (const product of catalog.list()) {
     const productChannel = productChannels[product.key];
     if (productChannel && !(await hasBotMessage(productChannel))) {
       await postProductCard(productChannel, product);

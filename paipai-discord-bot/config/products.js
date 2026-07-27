@@ -1,7 +1,11 @@
-﻿// Product catalog -> single source used by the per-product channels, the
-// ticket dropdown, and the status page. Descriptions reused as-is from
-// Products/ProductManager.cs (the C# app) to stay consistent with what's
-// already shown inside PaiPai itself.
+﻿// Produits INTEGRES au bot -> base du catalogue. Le catalogue reellement
+// utilise a l'execution est utils/catalog.js : il applique par-dessus les
+// modifications et les creations faites depuis PaiPai (Bot Manager), qui
+// vivent dans data/store.json. Ne jamais lire ce fichier directement dans
+// une commande : les produits crees depuis l'appli y seraient invisibles.
+//
+// Descriptions alignees sur Products/ProductManager.cs (l'appli C#) pour que
+// Discord et PaiPai racontent la meme chose.
 //
 // Champs OPTIONNELS de mise en forme (utils/embeds.js les omet proprement
 // s'ils sont absents -> rien ne casse tant qu'ils ne sont pas remplis) :
@@ -27,7 +31,7 @@ const COMMON_FAQ = [
   },
 ];
 
-module.exports = [
+const PRODUCTS = [
   {
     key: "woofer",
     name: "Woofer",
@@ -56,17 +60,33 @@ module.exports = [
     channelName: "valorant",
     emoji: "🎯",
     tagline: "Every round, under control.",
+    // Le produit vendu est un PACK (le toolkit + l'emulateur sur lequel il
+    // tourne) : la fiche doit le dire, sinon le nom « Val + Emulator » reste
+    // incompris et la question revient dans chaque ticket -> d'ou la FAQ
+    // dediee ci-dessous, en plus de la FAQ commune.
     description:
       "Take full control of every round. Precise aim assistance, lightning reflexes " +
       "and smart visual tools — all in a clean, undetected package built to help you " +
-      "climb the ranks.",
+      "climb the ranks.\n\n" +
+      "**What you get**\n" +
+      "• PaiPai Val — aim assistance, faster reactions, smart visual tools\n" +
+      "• The emulator it runs on, included — nothing extra to install\n" +
+      "• One-click launch straight from the PaiPai app\n" +
+      "• Always the latest build: the app downloads it for you at every launch\n" +
+      "• Windows 10 & 11 • Intel / AMD",
     imagePath: path.join(ASSETS, "valorant.jpg"),
     imageAttachmentName: "valorant.jpg",
     defaultStatus: "online",
     prices: [],
     delivery: null,
     website: null,
-    faq: COMMON_FAQ,
+    faq: [
+      {
+        q: "Do I need to set up the emulator myself?",
+        a: "No. The emulator ships with the product — the PaiPai app downloads and launches everything for you.",
+      },
+      ...COMMON_FAQ,
+    ],
   },
   {
     key: "roblox",
@@ -104,3 +124,9 @@ module.exports = [
     faq: COMMON_FAQ,
   },
 ];
+
+module.exports = PRODUCTS;
+// Attache a l'export pour que utils/catalog.js donne la meme FAQ aux produits
+// crees depuis PaiPai (le processus d'achat est le meme pour tous), sans
+// changer la forme de l'export (un simple tableau) attendue partout ailleurs.
+module.exports.COMMON_FAQ = COMMON_FAQ;

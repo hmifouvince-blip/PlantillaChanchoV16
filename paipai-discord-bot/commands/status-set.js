@@ -3,7 +3,7 @@
 // data/store.json (store.statusMessage).
 const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
 const { brandedEmbed, logoAttachment } = require("../utils/embeds");
-const products = require("../config/products");
+const catalog = require("../utils/catalog");
 const store = require("../utils/store");
 
 const STATUS_LABELS = {
@@ -13,7 +13,7 @@ const STATUS_LABELS = {
 };
 
 function buildStatusEmbed(productStatus) {
-  const lines = products.map((p) => {
+  const lines = catalog.list().map((p) => {
     const state = productStatus[p.key] || p.defaultStatus;
     return `**${p.name}** — ${STATUS_LABELS[state] || STATUS_LABELS.online}`;
   });
@@ -44,9 +44,28 @@ async function ensureStatusMessage(channel) {
   return true;
 }
 
+// Reecrit la page #status a partir du catalogue COURANT (sans changer aucun
+// etat) : indispensable apres une creation de produit depuis PaiPai, sinon le
+// nouveau produit n'apparaitrait sur la page qu'au prochain changement d'etat.
+// Renvoie null si tout s'est bien passe, sinon le message d'erreur a afficher.
+async function refreshStatusMessage(client) {
+  const data = store.load();
+  if (!data.statusMessage) return "No tracked status page — run /setup-server first.";
+
+  const channel = await client.channels.fetch(data.statusMessage.channelId).catch(() => null);
+  const message = channel
+    ? await channel.messages.fetch(data.statusMessage.messageId).catch(() => null)
+    : null;
+  if (!message) return "Status message not found — run /setup-server again.";
+
+  await message.edit({ embeds: [buildStatusEmbed(data.productStatus)], files: [logoAttachment()] });
+  return null;
+}
+
 module.exports = {
   buildStatusEmbed,
   ensureStatusMessage,
+  refreshStatusMessage,
   logoAttachment,
   data: new SlashCommandBuilder()
     .setName("status-set")
@@ -57,7 +76,11 @@ module.exports = {
         .setName("product")
         .setDescription("Which product")
         .setRequired(true)
-        .addChoices(...products.map((p) => ({ name: p.name, value: p.key })))
+        // Les choix d'une commande slash sont figes a l'ENREGISTREMENT (au
+        // demarrage) : un produit cree depuis PaiPai n'apparait ici qu'apres
+        // un redemarrage du bot. Le Bot Manager, lui, lit le catalogue en
+        // direct -> il voit le nouveau produit immediatement.
+        .addChoices(...catalog.list().map((p) => ({ name: p.name, value: p.key })))
     )
     .addStringOption((opt) =>
       opt
