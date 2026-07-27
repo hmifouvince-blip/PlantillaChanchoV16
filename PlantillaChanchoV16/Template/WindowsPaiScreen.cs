@@ -24,13 +24,19 @@ namespace PlantillaChanchoV16.Template
         private Panel _scroll;
         private Label _status;
         private Guna2Button _applyBtn;
+        private Guna2Button _scanBtn;
         private Guna2Button _vpnBtn;
         private Label _vpnStatus;
         private bool _vpnBusy;
+        private bool _scanBusy;
         private string _filter = "All";
         private readonly List<Guna2Button> _catButtons = new List<Guna2Button>();
         private readonly List<(WindowsPaiTweaks.Tweak tweak, Guna2CustomCheckBox check)> _checks
             = new List<(WindowsPaiTweaks.Tweak, Guna2CustomCheckBox)>();
+
+        // Resultat du dernier scan, par Id d'outil. Vide tant qu'on n'a pas analyse.
+        private Dictionary<string, WindowsPaiTweaks.Finding> _findings
+            = new Dictionary<string, WindowsPaiTweaks.Finding>();
 
         private const int Pad = 34;
 
@@ -51,7 +57,7 @@ namespace PlantillaChanchoV16.Template
             float pW = TextRenderer.MeasureText("Pai", new Font("Inter Semibold", 12f)).Width;
             MakeLbl("Pai", Colors.mainColor, new Font("Inter Semibold", 12f), new Point(Pad + (int)pW - 6, 22), true);
             MakeLbl("Windows PaiPai", Colors.mainColor, new Font("Inter Semibold", 18f), new Point(Pad, 48), true);
-            MakeLbl("Check the tools you want, then Apply.", Color.FromArgb(170, 255, 255, 255),
+            MakeLbl("Analyze your PC, then apply only what it actually needs.", Color.FromArgb(170, 255, 255, 255),
                 new Font("Inter Medium", 10f), new Point(Pad, 80), true);
 
             var close = new WindowButton(WindowButton.Glyph.Close, Color.FromArgb(255, 95, 87))
@@ -100,12 +106,23 @@ namespace PlantillaChanchoV16.Template
             _applyBtn.HoverState.FillColor = ControlPaint.Light(Colors.mainColor, 0.2f);
             _applyBtn.Click += async (s, e) => await ApplySelected();
 
+            // Analyze : lance tous les diagnostics et ne coche que ce qui sert vraiment.
+            _scanBtn = new Guna2Button
+            {
+                Parent = this, Text = "Analyze", Font = new Font("Inter Semibold", 10.5f),
+                ForeColor = Color.White, FillColor = Colors.scColor, BorderRadius = 10, BorderThickness = 0,
+                Size = new Size(130, 42), Cursor = Cursors.Hand, Animated = true, UseTransparentBackground = true,
+                Location = new Point(Width - Pad - 170 - 140, Height - 62)
+            };
+            _scanBtn.HoverState.FillColor = ControlPaint.Light(Colors.scColor, 0.3f);
+            _scanBtn.Click += async (s, e) => await RunScan();
+
             _status = new Label
             {
                 Parent = this, Text = "Ready.", ForeColor = Color.FromArgb(190, 255, 255, 255),
                 BackColor = Color.Transparent, Font = new Font("Inter Medium", 9.5f),
                 AutoSize = false, AutoEllipsis = true,
-                Size = new Size(Width - Pad * 2 - 190, 40), Location = new Point(Pad, Height - 60)
+                Size = new Size(Width - Pad * 2 - 330, 40), Location = new Point(Pad, Height - 60)
             };
 
             BuildCards();
@@ -230,40 +247,72 @@ namespace PlantillaChanchoV16.Template
             _scroll.Controls.Clear();
             _checks.Clear();
 
-            int y = 0, cardW = _scroll.Width - 22, cardH = 78;
+            int y = 0, cardW = _scroll.Width - 22, cardH = 100;
             foreach (var tweak in WindowsPaiTweaks.Tweaks)
             {
                 string cat = CategoryOf(tweak);
                 if (_filter != "All" && cat != _filter) continue;
+
+                WindowsPaiTweaks.Finding found = null;
+                if (tweak.Id != null) _findings.TryGetValue(tweak.Id, out found);
+
+                // Un outil "diagnostic seul" (securite, materiel) ne s'applique jamais tout
+                // seul : on le signale, l'utilisateur agit lui-meme.
+                bool manualOnly = tweak.AdviceOnly || string.IsNullOrWhiteSpace(tweak.Command);
 
                 var card = new Guna2Panel
                 {
                     Parent = _scroll, Location = new Point(0, y), Size = new Size(cardW, cardH),
                     FillColor = Colors.scColor, BorderRadius = 10, BorderThickness = 0,
                     UseTransparentBackground = true,
-                    CustomBorderThickness = new Padding(3, 0, 0, 0), CustomBorderColor = Colors.mainColor
+                    CustomBorderThickness = new Padding(3, 0, 0, 0),
+                    CustomBorderColor = found != null ? ColorOf(found.Level) : Colors.mainColor
                 };
 
-                // Icône de catégorie (dessinée).
-                var icon = new CategoryIcon(cat) { Parent = card, Location = new Point(14, (cardH - 44) / 2), Size = new Size(44, 44) };
+                new CategoryIcon(cat) { Parent = card, Location = new Point(14, (cardH - 44) / 2), Size = new Size(44, 44) };
 
                 new Guna2HtmlLabel
                 {
                     Parent = card, Text = tweak.Name, ForeColor = Color.White,
                     Font = new Font("Inter Semibold", 11f), AutoSize = true,
-                    BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(72, 15)
+                    BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(72, 12)
                 };
                 new Guna2HtmlLabel
                 {
                     Parent = card, Text = tweak.Description, ForeColor = Color.FromArgb(165, 255, 255, 255),
                     Font = new Font("Inter Medium", 9f), AutoSize = true,
-                    BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(72, 42)
+                    BackColor = Color.Transparent, IsSelectionEnabled = false, Location = new Point(72, 38)
                 };
+
+                // Ligne de diagnostic : vide tant qu'aucun scan n'a tourne.
+                new Label
+                {
+                    Parent = card,
+                    Text = found != null ? found.Message : (manualOnly ? "Diagnostic uniquement — action manuelle." : "Lance Analyze pour savoir si c'est utile."),
+                    ForeColor = found != null ? ColorOf(found.Level) : Color.FromArgb(120, 122, 138),
+                    BackColor = Color.Transparent, Font = new Font("Inter Medium", 8.5f),
+                    AutoSize = false, AutoEllipsis = true,
+                    Size = new Size(cardW - 72 - 60, 30), Location = new Point(72, 62)
+                };
+
+                if (manualOnly)
+                {
+                    new Label
+                    {
+                        Parent = card, Text = "MANUEL", ForeColor = Color.FromArgb(150, 152, 168),
+                        BackColor = Color.Transparent, Font = new Font("Inter Semibold", 8f),
+                        AutoSize = true, Location = new Point(cardW - 66, (cardH - 14) / 2)
+                    };
+                    y += cardH + 10;
+                    continue;
+                }
 
                 var chk = new Guna2CustomCheckBox
                 {
                     Parent = card, Size = new Size(22, 22),
-                    Location = new Point(cardW - 40, (cardH - 22) / 2), Animated = true
+                    Location = new Point(cardW - 40, (cardH - 22) / 2), Animated = true,
+                    // Apres un scan, on pre-coche uniquement ce qui pose reellement probleme.
+                    Checked = found != null && found.IsProblem
                 };
                 chk.CheckedState.FillColor = Colors.mainColor;
                 chk.CheckedState.BorderColor = Colors.mainColor;
@@ -285,13 +334,76 @@ namespace PlantillaChanchoV16.Template
             }
         }
 
+        // Lance tous les diagnostics en un seul passage, puis reconstruit les cartes en
+        // pre-cochant uniquement les outils dont le check a trouve un vrai probleme.
+        private async Task RunScan()
+        {
+            if (_scanBusy) return;
+            _scanBusy = true;
+            _scanBtn.Enabled = false;
+            _applyBtn.Enabled = false;
+            _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
+            _status.Text = "Analyzing your PC… (this can take up to a minute)";
+
+            _findings = await Task.Run(() => WindowsPaiTweaks.RunDiagnostics());
+            BuildCards();
+
+            int crit = 0, warn = 0, failed = 0;
+            foreach (var f in _findings.Values)
+            {
+                if (f.Level == WindowsPaiTweaks.Severity.Crit) crit++;
+                else if (f.Level == WindowsPaiTweaks.Severity.Warn) warn++;
+                // Un check qui plante renvoie quand meme une ligne INFO : il compte donc
+                // comme un resultat et echappe au controle de completude. On le compte a
+                // part, sinon un diagnostic casse passe totalement inapercu.
+                else if (f.Level == WindowsPaiTweaks.Severity.Info
+                         && f.Message.StartsWith("Diagnostic", StringComparison.OrdinalIgnoreCase)) failed++;
+            }
+            string tail = failed > 0 ? $" ({failed} check(s) could not run)" : "";
+
+            // Un scan qui echoue rendait 0 resultat, donc 0 critique et 0 avertissement,
+            // donc le message "ton PC est deja propre". C'est le pire mensonge possible :
+            // il rassure alors qu'aucun controle n'a tourne. On distingue explicitement
+            // "rien a corriger" de "le diagnostic n'a pas pu s'executer".
+            int expected = WindowsPaiTweaks.CheckCount;
+            if (_findings.Count == 0)
+            {
+                _status.ForeColor = Color.FromArgb(255, 95, 87);
+                _status.Text = "Analysis failed — no check could run. Nothing was diagnosed.";
+            }
+            else if (_findings.Count < expected / 2)
+            {
+                _status.ForeColor = Color.FromArgb(254, 188, 46);
+                _status.Text = $"Partial analysis — only {_findings.Count} of {expected} checks returned a result.";
+            }
+            else if (crit > 0)
+            {
+                _status.ForeColor = Color.FromArgb(255, 95, 87);
+                _status.Text = $"{crit} critical, {warn} to improve — the relevant tools are pre-checked." + tail;
+            }
+            else if (warn > 0)
+            {
+                _status.ForeColor = Color.FromArgb(254, 188, 46);
+                _status.Text = $"{warn} thing(s) to improve — the relevant tools are pre-checked." + tail;
+            }
+            else
+            {
+                _status.ForeColor = Colors.mainColor;
+                _status.Text = $"Nothing to fix — {_findings.Count} checks ran, your PC is clean." + tail;
+            }
+
+            _scanBtn.Enabled = true;
+            _applyBtn.Enabled = true;
+            _scanBusy = false;
+        }
+
         private async Task ApplySelected()
         {
             var selected = _checks.FindAll(c => c.check.Checked);
             if (selected.Count == 0)
             {
                 _status.ForeColor = Color.FromArgb(254, 188, 46);
-                _status.Text = "Check at least one tool first.";
+                _status.Text = "Check at least one tool first — or hit Analyze.";
                 return;
             }
 
@@ -306,30 +418,115 @@ namespace PlantillaChanchoV16.Template
                 }
 
             _applyBtn.Enabled = false;
+            _scanBtn.Enabled = false;
+
+            // Filet de securite : un point de restauration avant de toucher au systeme.
+            _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
+            _status.Text = "Creating a restore point first…";
+            bool rp = await Task.Run(() => WindowsPaiTweaks.CreateRestorePoint());
+
+            // Photo de la machine AVANT, pour pouvoir chiffrer le gain reel ensuite.
+            _status.Text = "Measuring your PC before…";
+            var before = await Task.Run(() => WindowsPaiTweaks.Snapshot());
+
             int done = 0;
+            bool reboot = false;
+            var appliedNames = new List<string>();
             foreach (var (tweak, _) in selected)
             {
                 done++;
                 _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
                 _status.Text = $"Applying ({done}/{selected.Count}): {tweak.Name}…";
-                await Task.Run(() => WindowsPaiTweaks.Run(tweak.Command));
+                string res = await Task.Run(() => WindowsPaiTweaks.Run(tweak.Command));
+                appliedNames.Add(tweak.Name + " — " + FirstLine(res));
+                if (tweak.NeedsReboot) reboot = true;
             }
+
+            // Le diagnostic d'avant l'application n'est plus valable : on relance un scan
+            // pour que l'utilisateur voie l'etat reel et non l'ancien.
+            _status.Text = "Measuring the result…";
+            var after = await Task.Run(() => WindowsPaiTweaks.Snapshot());
+            _findings = await Task.Run(() => WindowsPaiTweaks.RunDiagnostics());
+            BuildCards();
+
+            string report = WindowsPaiTweaks.BuildReport(before, after, appliedNames, _findings);
+            string path = WindowsPaiTweaks.SaveReport(report);
+
             _applyBtn.Enabled = true;
+            _scanBtn.Enabled = true;
             _status.ForeColor = Colors.mainColor;
-            _status.Text = $"Done — {selected.Count} tool(s) applied. 🌸".Replace("🌸", "");
+            _status.Text = $"Done — {selected.Count} tool(s) applied"
+                + (rp ? ", restore point created" : ", restore point unavailable")
+                + (reboot ? ". Restart to finish." : ".");
+
+            // Resume chiffre a l'ecran, rapport complet sur le Bureau.
+            string gains = BuildGainSummary(before, after);
+            string msg = gains
+                + (reboot ? "\n\nSome changes need a restart to take effect (page file, display layout)." : "")
+                + (string.IsNullOrEmpty(path) ? "" : "\n\nFull report saved to your Desktop:\n" + path);
+
+            SakuraMessageBox.Show(msg, "Windows PaiPai", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); }
+                catch { }
+            }
         }
 
-        private static string CategoryOf(WindowsPaiTweaks.Tweak t)
+        private static string FirstLine(string s)
         {
-            string s = ((t.Name ?? "") + " " + (t.Description ?? "")).ToLowerInvariant();
-            if (s.Contains("dns") || s.Contains("tcp") || s.Contains("reseau") || s.Contains("network") || s.Contains("vpn"))
-                return "Network";
-            if (s.Contains("telemetr") || s.Contains("diagtrack") || s.Contains("confidential") || s.Contains("privacy"))
-                return "Privacy";
-            if (s.Contains("temp") || s.Contains("cache") || s.Contains("corbeille") || s.Contains("recycle")
-                || s.Contains("clean") || s.Contains("hibernation") || s.Contains("store"))
-                return "Cleaning";
-            return "Performance";
+            if (string.IsNullOrWhiteSpace(s)) return "OK";
+            string[] lines = s.Split('\n');
+            return lines[0].Trim();
+        }
+
+        // Ne montre que les lignes ou quelque chose a reellement bouge : afficher
+        // "0 Go gagnes" a cote de vrais gains dilue le message.
+        private static string BuildGainSummary(Dictionary<string, double> b, Dictionary<string, double> a)
+        {
+            double G(Dictionary<string, double> d, string k) => d != null && d.ContainsKey(k) ? d[k] : 0;
+            var lines = new List<string>();
+
+            double disk = G(a, "freeGB") - G(b, "freeGB");
+            if (disk > 0.05) lines.Add($"• {disk:0.##} GB of disk space freed");
+
+            double proc = G(b, "procCount") - G(a, "procCount");
+            if (proc >= 1) lines.Add($"• {proc:0} fewer background processes");
+
+            double ram = G(a, "freeRamGB") - G(b, "freeRamGB");
+            if (ram > 0.05) lines.Add($"• {ram:0.##} GB of RAM freed");
+
+            double svc = G(b, "autoSvc") - G(a, "autoSvc");
+            if (svc >= 1) lines.Add($"• {svc:0} fewer services starting with Windows");
+
+            double tasks = G(b, "schedTasks") - G(a, "schedTasks");
+            if (tasks >= 1) lines.Add($"• {tasks:0} scheduled tasks disabled");
+
+            if (G(b, "pagefileHdd") > 0 && G(a, "pagefileHdd") == 0)
+                lines.Add("• Page file moved off the mechanical drive (biggest win)");
+
+            if (lines.Count == 0)
+                return "Everything applied, but the measurable numbers barely moved —\nyour PC was already in good shape on those points.";
+
+            return "Here is what you actually gained:\n\n" + string.Join("\n", lines);
+        }
+
+        // La categorie est maintenant portee par l'outil lui-meme. L'ancienne deduction par
+        // mots-cles rangeait par exemple "Reparer le fichier hosts" dans Cleaning a cause du
+        // mot "cache" present dans sa description.
+        private static string CategoryOf(WindowsPaiTweaks.Tweak t)
+            => string.IsNullOrWhiteSpace(t.Category) ? "Performance" : t.Category;
+
+        private static Color ColorOf(WindowsPaiTweaks.Severity s)
+        {
+            switch (s)
+            {
+                case WindowsPaiTweaks.Severity.Crit: return Color.FromArgb(255, 95, 87);
+                case WindowsPaiTweaks.Severity.Warn: return Color.FromArgb(254, 188, 46);
+                case WindowsPaiTweaks.Severity.Ok: return Color.FromArgb(80, 200, 120);
+                default: return Color.FromArgb(150, 152, 168);
+            }
         }
 
         // ---- Icône de catégorie dessinée (pas de fichier image requis) ----
