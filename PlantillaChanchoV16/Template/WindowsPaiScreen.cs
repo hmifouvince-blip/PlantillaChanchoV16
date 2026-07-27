@@ -422,7 +422,10 @@ namespace PlantillaChanchoV16.Template
 
             // Filet de securite : un point de restauration avant de toucher au systeme.
             _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
-            _status.Text = "Creating a restore point first…";
+            // Sur un SSD SATA sans cache DRAM, VSS met couramment 2 a 4 minutes. Sans cette
+            // precision l'utilisateur croit a un plantage et tue l'application en pleine
+            // operation.
+            _status.Text = "Creating a restore point first… (up to 3 min, this is normal)";
             bool rp = await Task.Run(() => WindowsPaiTweaks.CreateRestorePoint());
 
             // Photo de la machine AVANT, pour pouvoir chiffrer le gain reel ensuite.

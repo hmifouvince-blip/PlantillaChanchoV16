@@ -900,18 +900,36 @@ else{ ""OK|Connexion filaire active."" }",
             };
         }
 
-        public static string Run(string command)
+        public static string Run(string command) => Run(command, 0);
+
+        // timeoutMs = 0 : on attend indefiniment. Sinon le processus est tue au dela du
+        // delai. Indispensable pour le point de restauration : sur un SSD SATA sans cache
+        // DRAM, VSS peut mettre plusieurs minutes, et rien ne garantit qu'il aboutisse.
+        // Sans delai maximal l'interface restait figee sans fin.
+        public static string Run(string command, int timeoutMs)
         {
             if (string.IsNullOrWhiteSpace(command)) return "Rien a executer.";
             try
             {
                 using (var p = Process.Start(BuildPsi(command)))
                 {
-                    string output = p.StandardOutput.ReadToEnd();
-                    string error = p.StandardError.ReadToEnd();
-                    p.WaitForExit();
-                    output = (output ?? "").Trim();
-                    error = (error ?? "").Trim();
+                    // Lecture asynchrone des deux flux : les lire l'un apres l'autre peut
+                    // interbloquer si stderr sature son tampon pendant qu'on attend stdout.
+                    var outTask = p.StandardOutput.ReadToEndAsync();
+                    var errTask = p.StandardError.ReadToEndAsync();
+
+                    if (timeoutMs > 0)
+                    {
+                        if (!p.WaitForExit(timeoutMs))
+                        {
+                            try { p.Kill(true); } catch { }
+                            return "TIMEOUT";
+                        }
+                    }
+                    else p.WaitForExit();
+
+                    string output = (outTask.GetAwaiter().GetResult() ?? "").Trim();
+                    string error = (errTask.GetAwaiter().GetResult() ?? "").Trim();
                     if (!string.IsNullOrEmpty(error))
                         return string.IsNullOrEmpty(output) ? ("Erreur : " + error) : (output + "\nErreur : " + error);
                     return string.IsNullOrEmpty(output) ? "OK." : output;
@@ -934,7 +952,9 @@ try{
   Checkpoint-Computer -Description 'Avant optimisation PaiPai' -RestorePointType MODIFY_SETTINGS -EA Stop
   Write-Output 'PAIPAI_RP_OK'
 }catch{ Write-Output 'PAIPAI_RP_FAIL' }";
-            return Run(script).Contains("PAIPAI_RP_OK");
+            // 3 minutes maximum : au-dela, on renonce au point de restauration plutot que
+            // de laisser l'utilisateur devant un ecran fige. L'appelant doit le lui dire.
+            return Run(script, 180000).Contains("PAIPAI_RP_OK");
         }
 
         // -----------------------------------------------------------------------------
