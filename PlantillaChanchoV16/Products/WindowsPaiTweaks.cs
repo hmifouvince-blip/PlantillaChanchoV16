@@ -952,9 +952,11 @@ try{
   Checkpoint-Computer -Description 'Avant optimisation PaiPai' -RestorePointType MODIFY_SETTINGS -EA Stop
   Write-Output 'PAIPAI_RP_OK'
 }catch{ Write-Output 'PAIPAI_RP_FAIL' }";
-            // 3 minutes maximum : au-dela, on renonce au point de restauration plutot que
-            // de laisser l'utilisateur devant un ecran fige. L'appelant doit le lui dire.
-            return Run(script, 180000).Contains("PAIPAI_RP_OK");
+            // 90 secondes maximum. Observe en conditions reelles : quand VSS aboutit c'est
+            // en moins d'une minute ; au-dela il est bloque et ne rendra jamais la main.
+            // On renonce alors au point de restauration, et l'appelant l'annonce clairement
+            // plutot que de laisser l'utilisateur devant un ecran fige.
+            return Run(script, 90000).Contains("PAIPAI_RP_OK");
         }
 
         // -----------------------------------------------------------------------------

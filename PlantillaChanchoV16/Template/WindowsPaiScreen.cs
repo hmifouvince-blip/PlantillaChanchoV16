@@ -38,6 +38,16 @@ namespace PlantillaChanchoV16.Template
         private Dictionary<string, WindowsPaiTweaks.Finding> _findings
             = new Dictionary<string, WindowsPaiTweaks.Finding>();
 
+        // Barre d'attente indeterminee + compteur de secondes. Les operations longues
+        // (point de restauration, scan complet) laissaient l'ecran immobile : impossible de
+        // distinguer "ca travaille" de "c'est plante", et l'utilisateur tuait l'application.
+        private Guna2Panel _progTrack, _progThumb;
+        private System.Windows.Forms.Timer _progTimer;
+        private DateTime _opStart;
+        private string _opLabel = "";
+        private int _opMaxSeconds;
+        private int _progPos;
+
         private const int Pad = 34;
 
         public WindowsPaiScreen()
@@ -125,8 +135,68 @@ namespace PlantillaChanchoV16.Template
                 Size = new Size(Width - Pad * 2 - 330, 40), Location = new Point(Pad, Height - 60)
             };
 
+            BuildProgressBar();
             BuildCards();
             this.MouseDown += Drag;
+        }
+
+        private void BuildProgressBar()
+        {
+            _progTrack = new Guna2Panel
+            {
+                Parent = this, Location = new Point(Pad, Height - 80),
+                Size = new Size(Width - Pad * 2, 4),
+                FillColor = Colors.scColor, BorderRadius = 2, BorderThickness = 0,
+                UseTransparentBackground = true, Visible = false
+            };
+            _progThumb = new Guna2Panel
+            {
+                Parent = _progTrack, Location = new Point(0, 0), Size = new Size(90, 4),
+                FillColor = Colors.mainColor, BorderRadius = 2, BorderThickness = 0
+            };
+
+            _progTimer = new System.Windows.Forms.Timer { Interval = 40 };
+            _progTimer.Tick += (s, e) =>
+            {
+                // Va-et-vient : une barre indeterminee suffit a prouver que l'appli vit.
+                int span = _progTrack.Width - _progThumb.Width;
+                _progPos += 6;
+                if (span > 0)
+                {
+                    int cycle = _progPos % (span * 2);
+                    _progThumb.Left = cycle <= span ? cycle : span * 2 - cycle;
+                }
+
+                int sec = (int)(DateTime.Now - _opStart).TotalSeconds;
+                _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
+                _status.Text = _opMaxSeconds > 0
+                    ? $"{_opLabel} — {sec}s (up to {_opMaxSeconds}s, this is normal)"
+                    : $"{_opLabel} — {sec}s";
+            };
+        }
+
+        private void StartProgress(string label, int maxSeconds = 0)
+        {
+            _opLabel = label;
+            _opMaxSeconds = maxSeconds;
+            _opStart = DateTime.Now;
+            _progPos = 0;
+            _progThumb.Left = 0;
+            _progTrack.Visible = true;
+            _progTimer.Start();
+        }
+
+        private void SetProgressLabel(string label, int maxSeconds = 0)
+        {
+            _opLabel = label;
+            _opMaxSeconds = maxSeconds;
+            _opStart = DateTime.Now;
+        }
+
+        private void StopProgress()
+        {
+            _progTimer.Stop();
+            _progTrack.Visible = false;
         }
 
         private void BuildVpnBanner()
@@ -342,10 +412,10 @@ namespace PlantillaChanchoV16.Template
             _scanBusy = true;
             _scanBtn.Enabled = false;
             _applyBtn.Enabled = false;
-            _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
-            _status.Text = "Analyzing your PC… (this can take up to a minute)";
+            StartProgress("Analyzing your PC", 60);
 
             _findings = await Task.Run(() => WindowsPaiTweaks.RunDiagnostics());
+            StopProgress();
             BuildCards();
 
             int crit = 0, warn = 0, failed = 0;
@@ -421,15 +491,14 @@ namespace PlantillaChanchoV16.Template
             _scanBtn.Enabled = false;
 
             // Filet de securite : un point de restauration avant de toucher au systeme.
-            _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
-            // Sur un SSD SATA sans cache DRAM, VSS met couramment 2 a 4 minutes. Sans cette
-            // precision l'utilisateur croit a un plantage et tue l'application en pleine
-            // operation.
-            _status.Text = "Creating a restore point first… (up to 3 min, this is normal)";
+            // Sur un SSD SATA sans cache DRAM, VSS peut mettre plusieurs minutes, et il lui
+            // arrive de se bloquer sans jamais rendre la main. D'ou le delai maximal cote
+            // moteur, et le compteur de secondes ici.
+            StartProgress("Creating a restore point", 90);
             bool rp = await Task.Run(() => WindowsPaiTweaks.CreateRestorePoint());
 
             // Photo de la machine AVANT, pour pouvoir chiffrer le gain reel ensuite.
-            _status.Text = "Measuring your PC before…";
+            SetProgressLabel("Measuring your PC before");
             var before = await Task.Run(() => WindowsPaiTweaks.Snapshot());
 
             int done = 0;
@@ -438,8 +507,7 @@ namespace PlantillaChanchoV16.Template
             foreach (var (tweak, _) in selected)
             {
                 done++;
-                _status.ForeColor = Color.FromArgb(190, 255, 255, 255);
-                _status.Text = $"Applying ({done}/{selected.Count}): {tweak.Name}…";
+                SetProgressLabel($"Applying ({done}/{selected.Count}): {tweak.Name}");
                 string res = await Task.Run(() => WindowsPaiTweaks.Run(tweak.Command));
                 appliedNames.Add(tweak.Name + " — " + FirstLine(res));
                 if (tweak.NeedsReboot) reboot = true;
@@ -447,9 +515,10 @@ namespace PlantillaChanchoV16.Template
 
             // Le diagnostic d'avant l'application n'est plus valable : on relance un scan
             // pour que l'utilisateur voie l'etat reel et non l'ancien.
-            _status.Text = "Measuring the result…";
+            SetProgressLabel("Measuring the result", 60);
             var after = await Task.Run(() => WindowsPaiTweaks.Snapshot());
             _findings = await Task.Run(() => WindowsPaiTweaks.RunDiagnostics());
+            StopProgress();
             BuildCards();
 
             string report = WindowsPaiTweaks.BuildReport(before, after, appliedNames, _findings);
