@@ -2322,11 +2322,22 @@ namespace PlantillaChanchoV16
                 scr.ShowDialog(this);
         }
 
-        // Ouvre Bot Manager (pilotage du bot Discord), verrouillé par l'abonnement "BotManager".
+        // Ouvre Bot Manager (pilotage du bot Discord).
+        //
+        // PAS de verrou de licence ici, volontairement. Il y en avait un
+        // ("botmanager"), mais il créait un blocage insoluble : le bouton
+        // "Link Discord" — le seul moyen pour un coéquipier d'obtenir un accès —
+        // vit À L'INTÉRIEUR de cet écran. Exiger une licence pour l'ouvrir
+        // revenait à exiger une clé payante avant de pouvoir se connecter avec
+        // son compte Discord, alors que le rôle PaiPai/PeiPei attribué sur le
+        // serveur est déjà la preuve d'appartenance à l'équipe.
+        //
+        // L'écran seul ne donne AUCUN pouvoir : chaque action passe par l'API du
+        // bot, qui exige soit la clé de contrôle, soit un jeton adossé à un rôle
+        // Discord, et qui revalide ce rôle à chaque publication. Le verrou réel
+        // est côté serveur, pas ici.
         private void OpenBotManager()
         {
-            if (!RequireLicense("botmanager")) return;
-
             using (var scr = new Template.BotManagerScreen())
                 scr.ShowDialog(this);
         }

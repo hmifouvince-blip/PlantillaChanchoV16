@@ -412,9 +412,11 @@ namespace PlantillaChanchoV16.Template
 
             if (!hasProfile)
             {
-                _procStatus.Text = "No bot selected";
+                _procStatus.Text = "Not connected";
                 _procStatus.ForeColor = Color.FromArgb(150, 152, 168);
-                _procHint.Text = "Add a bot profile to get started.";
+                // On oriente vers "Link Discord" et non vers "+ Add" : c'est le
+                // chemin qui ne demande AUCUN token, juste le rôle Discord.
+                _procHint.Text = "Click \"Link Discord\" to connect with your Discord account.";
                 SetStartStopLook("Start", accent: true);
                 _banner.Invalidate(true);
                 return;
