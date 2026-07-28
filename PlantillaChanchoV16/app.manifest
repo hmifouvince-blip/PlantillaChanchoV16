@@ -6,11 +6,16 @@
        dans C:\Windows\Fonts + ecriture dans HKEY_LOCAL_MACHINE (Program.cs), et
        les tweaks Windows PaiPai lancent des commandes PowerShell systeme.
        "requireAdministrator" fait afficher l'invite UAC par Windows AU LANCEMENT :
-       plus de "clic droit -> Executer en tant qu'administrateur", et l'icone de
+       plus de "clic droit / Executer en tant qu'administrateur", et l'icone de
        l'exe porte le bouclier.
-       ATTENTION : ce fichier ne sert a RIEN tant que <ApplicationManifest> n'est
-       pas renseigne dans le .csproj -- c'etait le cas jusqu'ici (balise vide),
-       d'ou l'ancien message "The application must be run as administrator". -->
+       ATTENTION : ce fichier ne sert a rien tant que ApplicationManifest n'est
+       pas renseigne dans le .csproj (la balise y etait vide jusqu'ici, d'ou
+       l'ancien message "The application must be run as administrator").
+       PIEGE : deux tirets consecutifs sont INTERDITS dans un commentaire XML.
+       MSBuild embarque le manifeste sans le valider, Windows le refuse ensuite
+       et l'exe ne demarre plus du tout ("configuration de l'application
+       incorrecte"). Relire ce fichier avec un parseur XML apres chaque
+       modification. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
@@ -20,7 +25,7 @@
   </trustInfo>
 
   <!-- Sans cette liste, Windows fait croire a l'application qu'elle tourne sur
-       Windows 8 (Environment.OSVersion plafonne a 6.2) -> les verifications de
+       Windows 8 (Environment.OSVersion plafonne a 6.2) : les verifications de
        version faites par Windows PaiPai deviendraient fausses. -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
