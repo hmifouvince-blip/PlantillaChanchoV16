@@ -17,7 +17,8 @@ const catalog = require("../utils/catalog");
 const payments = require("../utils/payments");
 const { paymentEmbed, logoAttachment } = require("../utils/embeds");
 const store = require("../utils/store");
-const { TICKETS_CATEGORY_NAME } = require("../config/serverStructure");
+const delivery = require("./delivery");
+const { TICKETS_CATEGORY_NAME, STAFF_ROLE_NAME } = require("../config/serverStructure");
 
 const OPEN_BUTTON_ID = "paipai_open_ticket";
 const REASON_SELECT_ID = "paipai_ticket_reason";
@@ -29,7 +30,6 @@ const CLOSE_CANCEL_ID = "paipai_ticket_close_cancel";
 // (e.g. "paipai_buy_valorant") -> lets interactionCreate.js route any
 // button matching this prefix without listing every product key.
 const BUY_BUTTON_PREFIX = "paipai_buy_";
-const STAFF_ROLE_NAME = "Staff";
 
 // Publie la carte des moyens de paiement DANS LE SALON DONNE. Reutilisee par
 // l'ouverture de ticket et par /payment-post (quand le Staff veut la reposter
@@ -149,6 +149,10 @@ async function createTicketChannel(interaction, reasonKey) {
   store.update((d) => {
     d.openTickets[ticketChannel.id] = {
       userId: interaction.user.id,
+      // La CLE du produit en plus du libelle : c'est elle qui permet a la
+      // livraison de retrouver les formules du produit sans deviner d'apres
+      // un nom qui peut etre renomme entre-temps.
+      productKey: product ? product.key : null,
       reasonLabel,
       claimedBy: null,
     };
@@ -181,7 +185,10 @@ async function createTicketChannel(interaction, reasonKey) {
   await ticketChannel.send({
     content: staffRole ? `<@&${staffRole.id}>` : undefined,
     embeds: [embed],
-    components: [controlRow],
+    // 2e rangee : la livraison. Le bouton est visible par tous mais refuse
+    // toute personne hors Staff au clic -- Discord ne sait pas masquer un
+    // composant par role.
+    components: [controlRow, delivery.deliverRow()],
   });
 
   // Les moyens de paiement arrivent tout de suite apres, dans le meme salon

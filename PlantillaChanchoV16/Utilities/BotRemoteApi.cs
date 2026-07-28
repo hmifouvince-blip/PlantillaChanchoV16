@@ -159,6 +159,15 @@ namespace PlantillaChanchoV16.Utilities
         public static Task<Result> SetPaymentIntro(string baseUrl, Auth auth, string intro)
             => SendAsync(HttpMethod.Post, baseUrl, auth, "/payment-intro", new JObject { ["intro"] = intro });
 
+        // Livraison automatique : dit seulement SI la cle vendeur KeyAuth est
+        // presente cote hebergeur. Le secret lui-meme ne transite jamais.
+        public static Task<Result> KeyAuthStatus(string baseUrl, Auth auth)
+            => SendAsync(HttpMethod.Get, baseUrl, auth, "/keyauth-status");
+
+        // Historique des licences livrees (cles masquees cote bot).
+        public static Task<Result> Sales(string baseUrl, Auth auth, int limit = 25)
+            => SendAsync(HttpMethod.Get, baseUrl, auth, $"/sales?limit={limit}");
+
         // Publier VIA le bot (et non directement via l'API Discord) : la mise
         // en page riche vit dans paipai-discord-bot/utils/embeds.js, un seul
         // endroit. La reconstruire ici la ferait diverger au premier changement.

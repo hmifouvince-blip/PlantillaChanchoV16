@@ -16,7 +16,11 @@ const store = require("./store");
 // (renommer un salon casserait les liens deja publies), ni l'image (aucun
 // upload de fichier dans l'API de controle -> les produits crees retombent
 // sur le logo PaiPai).
-const EDITABLE_FIELDS = ["name", "emoji", "tagline", "description", "prices", "delivery", "website", "note"];
+// `offers` = les formules vendues : libelle, prix, duree de la cle (en jours)
+// et niveau d'abonnement KeyAuth. C'est ce qui permet la livraison
+// automatique -- une offre sans `days` reste affichee mais devra etre livree
+// a la main (utile pour fixer les prix avant d'avoir decide des durees).
+const EDITABLE_FIELDS = ["name", "emoji", "tagline", "description", "prices", "offers", "delivery", "website", "note"];
 
 // Limites CONSERVATRICES par rapport a Discord (titre d'embed 256, description
 // 4096, nom de salon 100, nom de role 100) : un depassement fait echouer TOUT
@@ -34,6 +38,10 @@ const LIMITS = {
   priceLabel: 40,
   priceValue: 40,
   prices: 8,
+  offers: 8,
+  // 10 ans = ce que KeyAuth et l'appli traitent deja comme "a vie".
+  days: 3650,
+  level: 100,
 };
 
 const KEY_PATTERN = /^[a-z0-9][a-z0-9-]{1,23}$/;
@@ -118,6 +126,7 @@ function toPublic(product, productStatus) {
     description: product.description || "",
     channelName: product.channelName,
     prices: Array.isArray(product.prices) ? product.prices : [],
+    offers: Array.isArray(product.offers) ? product.offers : [],
     delivery: product.delivery || "",
     website: product.website || "",
     note: product.note || "",
@@ -158,6 +167,43 @@ function buildPatch(input) {
         prices.push({ label, price });
       }
       patch.prices = prices;
+      continue;
+    }
+
+    if (field === "offers") {
+      const raw = input.offers;
+      if (!Array.isArray(raw)) return { ok: false, error: "Offers must be a list." };
+      if (raw.length > LIMITS.offers) return { ok: false, error: `At most ${LIMITS.offers} offers per product.` };
+      const offers = [];
+      for (const row of raw) {
+        const label = String((row && row.label) || "").trim();
+        const price = String((row && row.price) || "").trim();
+        if (!label || !price) return { ok: false, error: "Each offer needs a label and a price." };
+        if (tooLong(label, LIMITS.priceLabel) || tooLong(price, LIMITS.priceValue)) {
+          return { ok: false, error: `Offer label/price are limited to ${LIMITS.priceLabel} characters.` };
+        }
+
+        // days/level ABSENTS = offre "vitrine" : elle s'affiche, mais le bouton
+        // de livraison ne pourra pas generer de cle pour elle. C'est volontaire,
+        // ca permet d'annoncer un prix avant d'avoir fixe la duree.
+        const offer = { label, price };
+        if (row.days !== undefined && row.days !== null && String(row.days).length > 0) {
+          const days = Number(row.days);
+          if (!Number.isFinite(days) || days < 0 || days > LIMITS.days) {
+            return { ok: false, error: `Duration must be between 0 (lifetime) and ${LIMITS.days} days.` };
+          }
+          offer.days = Math.round(days);
+        }
+        if (row.level !== undefined && row.level !== null && String(row.level).length > 0) {
+          const level = Number(row.level);
+          if (!Number.isFinite(level) || level < 1 || level > LIMITS.level) {
+            return { ok: false, error: `KeyAuth level must be between 1 and ${LIMITS.level}.` };
+          }
+          offer.level = Math.round(level);
+        }
+        offers.push(offer);
+      }
+      patch.offers = offers;
       continue;
     }
 
@@ -212,6 +258,7 @@ function upsert(input) {
         tagline: patch.tagline || "",
         description: patch.description || "",
         prices: patch.prices || [],
+        offers: patch.offers || [],
         delivery: patch.delivery || "",
         website: patch.website || "",
         note: patch.note || "",

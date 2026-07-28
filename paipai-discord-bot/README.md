@@ -148,6 +148,8 @@ localement.
 | `POST /payment` | Ajoute ou modifie un moyen de paiement |
 | `POST /payment-delete` | Supprime un moyen de paiement |
 | `POST /payment-intro` | Change la phrase affichée au-dessus des adresses |
+| `GET /keyauth-status` | Dit si la clé vendeur KeyAuth est configurée (jamais la clé elle-même) |
+| `GET /sales?limit=N` | Les dernières licences livrées (clés masquées) |
 | `POST /announce` | Publie une annonce dans #announcements |
 | `POST /update` | Publie un changelog dans #updates |
 
@@ -228,6 +230,73 @@ conditions de PayPal (risque de limitation du compte) et prive l'acheteur de
 toute protection. C'est ton choix commercial — le champ « note » de chaque
 moyen est là pour dire clairement à l'acheteur ce que tu attends de lui.
 
+## Livraison automatique des licences
+
+**Ce qui est automatique :** génération de la clé chez KeyAuth, envoi dans le
+ticket, envoi en MP, attribution du rôle du produit, journal des ventes.
+**Ce qui ne l'est pas :** constater que l'argent est arrivé — voir plus bas.
+
+### 1. Une fois : donner sa clé vendeur au bot
+
+Dans le panel de ton hébergeur, ouvre le fichier `.env` du bot et ajoute :
+
+```
+KEYAUTH_SELLER_KEY=ta_cle_vendeur_keyauth
+```
+
+Elle se trouve sur le dashboard KeyAuth (*Seller Settings*). Redémarre le bot.
+Dans PaiPai → Bot Manager → **Payments**, la ligne du haut passe alors à
+« ⚡ Auto-delivery ready ».
+
+⚠️ Cette clé est un secret **maître** : elle permet de créer *et de supprimer*
+licences et comptes. Elle ne va que dans `.env` chez l'hébergeur — jamais dans
+le dépôt, jamais dans PaiPai, jamais dans un salon Discord. Si tu la crois
+exposée, régénère-la depuis KeyAuth.
+
+### 2. Quand tu veux : tes prix et tes durées
+
+PaiPai → Bot Manager → **Products** → `Edit` → champ **Offers**, une ligne par
+formule :
+
+```
+1 week    | 8 €  | 7   | 1
+1 month   | 20 € | 30  | 1
+Lifetime  | 90 € | 0   | 1
+Reseller  | ask staff
+```
+
+`libellé | prix | durée en jours | niveau KeyAuth`. `0` jour = à vie. Les deux
+derniers champs sont **facultatifs** : sans eux l'offre s'affiche sur la fiche
+produit mais ne peut pas être livrée automatiquement (pratique pour annoncer un
+prix avant d'avoir tranché la durée). Le **niveau** est ce qui décide à quel
+produit la clé donne accès : il doit correspondre au niveau de l'abonnement
+KeyAuth du produit (`Valorant`, `Roblox`, `Spoofer`, `WindowsPai`…).
+
+### 3. À chaque vente
+
+Dans le ticket, un bouton **« Payment received → deliver »** (Staff uniquement,
+ou `/deliver`). Un clic → menu des formules du produit → le bot génère la clé,
+la poste dans le ticket, l'envoie en MP, donne le rôle du produit et
+enregistre la vente. L'acheteur colle la clé dans PaiPai (*Add license*, ou à
+l'inscription) et son produit se débloque.
+
+L'historique est consultable depuis Bot Manager → **Payments** → **Sales**
+(30 dernières livraisons). Les clés y sont **masquées** (4 derniers
+caractères) : `data/store.json` est lisible via l'API de contrôle, une copie ne
+doit pas fournir un stock de licences valides.
+
+### Pourquoi un clic et pas zéro
+
+PayPal **Friends & Family** n'émet aucune notification marchande exploitable
+(pas de webhook, c'est un virement entre proches), et un paiement crypto
+demanderait de surveiller la chaîne et de faire correspondre un montant exact
+à un acheteur. Un « paiement reçu » deviné à tort, c'est une licence offerte.
+La confirmation humaine est donc le seul maillon conservé — tout ce qui suit
+est automatique. Pour une détection réelle, il faut un encaissement qui
+prévient le vendeur (PayPal *Goods & Services* via son API, un processeur
+crypto type NOWPayments/BTCPay avec webhook) : c'est une évolution possible,
+pas un réglage.
+
 ## Commandes disponibles (réservées au Staff / Administrateur)
 
 | Commande | Rôle requis | Effet |
@@ -238,6 +307,7 @@ moyen est là pour dire clairement à l'acheteur ce que tu attends de lui.
 | `/update-post title: changelog: [product:] [version:] [note:]` | Gérer le serveur | Publie une update dans #updates |
 | `/announce titre: message: ping:` | Gérer le serveur | Publie une annonce dans #annonces |
 | `/payment-post` | Gérer le serveur | Republie les moyens de paiement dans le salon courant (à utiliser dans un ticket) |
+| `/deliver` | Gérer les messages + rôle Staff | Livre une licence dans le ticket courant (même menu que le bouton) |
 | `/link` | Rôle PaiPai / PeiPei | Génère un code pour piloter le bot depuis PaiPai |
 | `/unlink` | Rôle PaiPai / PeiPei | Révoque tous ses accès PaiPai |
 

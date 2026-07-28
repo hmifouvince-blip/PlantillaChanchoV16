@@ -140,7 +140,65 @@ function paymentEmbed({ methods, intro, warning, productName }) {
   return embed;
 }
 
+// ---- Livraison d'une licence ----
+// La cle est dans un bloc de code : bouton « copier » cote Discord, et aucune
+// mise en forme ne peut la deformer. Envoye dans le ticket ET en message
+// prive -- si le ticket est ferme avant que l'acheteur revienne, il garde sa
+// cle dans ses MP.
+function licenseEmbed({ product, offerLabel, duration, key, buyerId }) {
+  const lines = [];
+  if (buyerId) lines.push(`<@${buyerId}>, thanks for your purchase!`);
+  // « 1 month · 1 month » : quand le libelle de la formule EST deja la duree,
+  // la repeter donne l'air d'un bug.
+  const extra = duration && duration.toLowerCase() !== String(offerLabel).toLowerCase() ? ` · ${duration}` : "";
+  lines.push(`**${product ? product.name : "PaiPai"}** — ${offerLabel}${extra}`);
+
+  return new EmbedBuilder()
+    .setColor(branding.colors.success)
+    .setAuthor({ name: "PaiPai — Delivery", iconURL: LOGO_URI })
+    .setTitle("🔑 Your license key")
+    .setDescription(lines.join("\n\n"))
+    .setThumbnail(LOGO_URI)
+    .addFields(
+      { name: "License", value: `\`\`\`\n${key}\n\`\`\``, inline: false },
+      {
+        name: "How to use it",
+        value:
+          "1. Open **PaiPai** and sign in (or create an account with this key)\n" +
+          "2. Already signed in? Click **Add license** on the welcome banner and paste it\n" +
+          "3. The product unlocks right away — no restart needed",
+        inline: false,
+      }
+    )
+    .setFooter(footerFor("Keep this key private"))
+    .setTimestamp(Date.now());
+}
+
 // ---- Fiche produit ----
+// Duree lisible : KeyAuth compte en jours, l'acheteur pense en mois.
+function durationLabel(days) {
+  if (days === undefined || days === null) return null;
+  const n = Number(days);
+  if (!Number.isFinite(n) || n <= 0 || n >= 3650) return "lifetime";
+  if (n % 365 === 0) return `${n / 365} year${n / 365 > 1 ? "s" : ""}`;
+  if (n % 30 === 0) return `${n / 30} month${n / 30 > 1 ? "s" : ""}`;
+  return `${n} day${n > 1 ? "s" : ""}`;
+}
+
+// Formules vendues (libelle, prix, duree). Remplace `prices` des qu'un produit
+// en a : c'est la meme information, en plus complet.
+function offerBlock(offers) {
+  if (!Array.isArray(offers) || offers.length === 0) return null;
+  const width = Math.max(...offers.map((o) => o.label.length));
+  return offers
+    .map((o) => {
+      const duration = durationLabel(o.days);
+      const extra = duration && duration.toLowerCase() !== String(o.label).toLowerCase() ? ` · ${duration}` : "";
+      return `\`${o.label.padEnd(width)}\`  **${o.price}**${extra}`;
+    })
+    .join("\n");
+}
+
 function priceBlock(prices) {
   if (!Array.isArray(prices) || prices.length === 0) return null;
   // Largeur fixe sur le libelle -> les prix s'alignent verticalement en
@@ -165,7 +223,7 @@ function productEmbed(product, state) {
     .setFooter(footerFor(branding.tagline))
     .setTimestamp(Date.now());
 
-  const prices = priceBlock(product.prices);
+  const prices = offerBlock(product.offers) || priceBlock(product.prices);
   if (prices) embed.addFields({ name: "💎 Pricing", value: prices, inline: false });
 
   embed.addFields({ name: "📊 Availability", value: status, inline: true });
@@ -215,6 +273,9 @@ module.exports = {
   announceEmbed,
   updateEmbed,
   paymentEmbed,
+  licenseEmbed,
+  durationLabel,
+  offerBlock,
   productEmbed,
   productComponents,
 };

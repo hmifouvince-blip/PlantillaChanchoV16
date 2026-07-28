@@ -15,6 +15,7 @@ const util = require("node:util");
 const store = require("../utils/store");
 const catalog = require("../utils/catalog");
 const payments = require("../utils/payments");
+const keyauth = require("../utils/keyauth");
 const branding = require("../config/branding");
 const link = require("../features/link");
 const { refreshStatusMessage } = require("../commands/status-set");
@@ -372,6 +373,20 @@ async function handle(req, res, client) {
     if (!result.ok) return send(400, result);
     console.log(`[control] Texte d'introduction du paiement modifié par ${caller.label}.`);
     return send(200, { ok: true, intro: result.intro });
+  }
+
+  // Etat de la livraison automatique. Ne renvoie JAMAIS la cle vendeur, juste
+  // le fait qu'elle soit presente ou non : PaiPai a besoin de le savoir pour
+  // dire quoi configurer, pas de connaitre le secret.
+  if (req.method === "GET" && url.pathname === "/keyauth-status") {
+    return send(200, { ok: true, ...keyauth.status() });
+  }
+
+  // Dernieres ventes livrees, les plus recentes d'abord.
+  if (req.method === "GET" && url.pathname === "/sales") {
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 25, 1), 100);
+    const sales = (store.load().sales || []).slice(-limit).reverse();
+    return send(200, { ok: true, sales });
   }
 
   return send(404, { ok: false, error: "Unknown route." });

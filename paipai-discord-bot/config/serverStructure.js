@@ -127,4 +127,10 @@ const TICKETS_CATEGORY_NAME = "🎫 Tickets";
 // info (status/updates) stays distinct from individual product pages.
 const PRODUCTS_CATEGORY_NAME = "🛍️ PRODUCTS";
 
-module.exports = { ROLES, CATEGORIES, TICKETS_CATEGORY_NAME, PRODUCTS_CATEGORY_NAME };
+// Nom du role qui peut reclamer/fermer un ticket et livrer une licence.
+// Exporte ici pour que features/tickets.js et features/delivery.js le lisent
+// au MEME endroit : deux constantes "Staff" qui divergent, et la livraison
+// devient accessible a tout le monde.
+const STAFF_ROLE_NAME = "Staff";
+
+module.exports = { ROLES, CATEGORIES, TICKETS_CATEGORY_NAME, PRODUCTS_CATEGORY_NAME, STAFF_ROLE_NAME };

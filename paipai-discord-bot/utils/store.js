@@ -32,6 +32,12 @@ const DEFAULTS = {
   paymentMethods: [],
   // Phrase d'introduction affichee au-dessus des moyens de paiement.
   paymentIntro: "",
+
+  // Journal des livraisons (features/delivery.js). La cle n'y figure JAMAIS
+  // en clair : ce fichier est lisible via l'API de controle, une copie ne doit
+  // pas donner un stock de licences valides. Seuls les 4 derniers caracteres
+  // sont conserves, de quoi rapprocher une ligne d'une reclamation client.
+  sales: [],
   // id du message de la page de statut, pour l'EDITER au lieu d'en
   // reposter un nouveau a chaque /status-set.
   statusMessage: null, // { channelId, messageId }

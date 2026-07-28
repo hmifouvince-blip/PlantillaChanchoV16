@@ -2,6 +2,7 @@
 const { MessageFlags } = require("discord.js");
 const verification = require("../features/verification");
 const tickets = require("../features/tickets");
+const delivery = require("../features/delivery");
 
 module.exports = {
   name: "interactionCreate",
@@ -36,6 +37,8 @@ module.exports = {
             return tickets.handleCloseConfirm(interaction);
           case tickets.CLOSE_CANCEL_ID:
             return tickets.handleCloseCancel(interaction);
+          case delivery.DELIVER_BUTTON_ID:
+            return delivery.handleDeliverButton(interaction);
         }
         return;
       }
@@ -43,6 +46,9 @@ module.exports = {
       if (interaction.isStringSelectMenu()) {
         if (interaction.customId === tickets.REASON_SELECT_ID) {
           return tickets.handleReasonSelect(interaction);
+        }
+        if (interaction.customId === delivery.DELIVER_SELECT_ID) {
+          return delivery.handleDeliverSelect(interaction);
         }
         return;
       }

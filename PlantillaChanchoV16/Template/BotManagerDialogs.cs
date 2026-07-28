@@ -721,9 +721,15 @@ namespace PlantillaChanchoV16.Template
                     Font = new Font("Inter Semibold", 10f), AutoSize = true, BackColor = Color.Transparent,
                     IsSelectionEnabled = false, Location = new Point(16, 11),
                 };
+                int offerCount = (item["offers"] as JArray)?.Count ?? 0;
+                int deliverable = (item["offers"] as JArray)?.OfType<JObject>().Count(o => o["days"] != null) ?? 0;
+                string offersText = offerCount == 0
+                    ? "no offer"
+                    : $"{offerCount} offer{(offerCount > 1 ? "s" : "")}, {deliverable} auto-delivered";
+
                 new Guna2HtmlLabel
                 {
-                    Parent = row, Text = $"#{channel} • {status}{(builtin ? "" : " • created from PaiPai")}",
+                    Parent = row, Text = $"#{channel} • {status} • {offersText}{(builtin ? "" : " • created from PaiPai")}",
                     ForeColor = Color.FromArgb(150, 255, 255, 255), Font = new Font("Inter Medium", 8f),
                     AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false,
                     Location = new Point(16, 33),
@@ -836,8 +842,9 @@ namespace PlantillaChanchoV16.Template
             _description = MakeMultiline(new Point(pad, y + 20), new Size(fieldW, 150));
 
             y += 192;
-            MakeFieldLabel("Pricing — one per line:   1 month = 15 €", pad, y);
+            MakeFieldLabel("Offers — one per line:   1 month | 15 € | 30 | 1      (days: 0 = lifetime · last = KeyAuth level)", pad, y);
             _prices = MakeMultiline(new Point(pad, y + 20), new Size(fieldW, 76));
+            _prices.PlaceholderText = "1 month | 15 € | 30 | 1";
 
             y += 118;
             MakeFieldLabel("Delivery (optional)", pad, y);
@@ -890,9 +897,24 @@ namespace PlantillaChanchoV16.Template
             _website.Text = (string?)p["website"] ?? "";
             _note.Text = (string?)p["note"] ?? "";
 
+            // Les offres remplacent l'ancien format "libellé = prix" : on les
+            // reaffiche telles qu'elles se saisissent, champs vides compris,
+            // pour qu'un aller-retour d'édition ne perde jamais une durée.
             var sb = new StringBuilder();
-            foreach (var price in (p["prices"] as JArray ?? new JArray()).OfType<JObject>())
-                sb.AppendLine($"{(string?)price["label"]} = {(string?)price["price"]}");
+            foreach (var offer in (p["offers"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                string line = $"{(string?)offer["label"]} | {(string?)offer["price"]}";
+                if (offer["days"] != null) line += $" | {(int?)offer["days"]}";
+                if (offer["level"] != null) line += $" | {(int?)offer["level"]}";
+                sb.AppendLine(line);
+            }
+            // Produit encore sur l'ancien format (tarifs sans durée) : on le
+            // convertit à l'affichage plutôt que de le faire disparaître.
+            if (sb.Length == 0)
+            {
+                foreach (var price in (p["prices"] as JArray ?? new JArray()).OfType<JObject>())
+                    sb.AppendLine($"{(string?)price["label"]} | {(string?)price["price"]}");
+            }
             _prices.Text = sb.ToString().TrimEnd();
         }
 
@@ -911,24 +933,57 @@ namespace PlantillaChanchoV16.Template
                 return;
             }
 
-            var prices = new JArray();
+            // Format d'une ligne : libellé | prix | durée en jours | niveau KeyAuth.
+            // Les deux derniers champs sont FACULTATIFS : sans eux l'offre
+            // s'affiche mais ne peut pas être livrée automatiquement — ça permet
+            // d'annoncer un prix avant d'avoir tranché sur la durée.
+            var offers = new JArray();
             foreach (string line in _prices.Text.Split('\n'))
             {
                 string row = line.Trim();
                 if (row.Length == 0) continue;
-                int sep = row.IndexOfAny(new[] { '=', '|' });
-                if (sep <= 0 || sep == row.Length - 1)
+
+                string[] parts = row.Split(new[] { '|' }, StringSplitOptions.None);
+                // Tolère l'ancien "libellé = prix" pour ne pas casser ce qui existe.
+                if (parts.Length == 1) parts = row.Split(new[] { '=' }, 2);
+
+                if (parts.Length < 2 || parts[0].Trim().Length == 0 || parts[1].Trim().Length == 0)
                 {
                     SakuraMessageBox.Show(
-                        $"Pricing line not understood:\n{row}\n\nUse: label = price   (e.g. 1 month = 15 €)",
+                        $"Offer line not understood:\n{row}\n\nUse: label | price | days | level\ne.g. 1 month | 15 € | 30 | 1\n(days and level are optional; days 0 = lifetime)",
                         "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                prices.Add(new JObject
+
+                var offer = new JObject
                 {
-                    ["label"] = row.Substring(0, sep).Trim(),
-                    ["price"] = row.Substring(sep + 1).Trim(),
-                });
+                    ["label"] = parts[0].Trim(),
+                    ["price"] = parts[1].Trim(),
+                };
+
+                if (parts.Length >= 3 && parts[2].Trim().Length > 0)
+                {
+                    if (!int.TryParse(new string(parts[2].Where(char.IsDigit).ToArray()), out int days))
+                    {
+                        SakuraMessageBox.Show($"Duration not understood on:\n{row}\n\nUse a number of days (0 = lifetime).",
+                            "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    offer["days"] = days;
+                }
+
+                if (parts.Length >= 4 && parts[3].Trim().Length > 0)
+                {
+                    if (!int.TryParse(new string(parts[3].Where(char.IsDigit).ToArray()), out int level) || level < 1)
+                    {
+                        SakuraMessageBox.Show($"KeyAuth level not understood on:\n{row}\n\nUse a number (1, 2, 3…).",
+                            "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    offer["level"] = level;
+                }
+
+                offers.Add(offer);
             }
 
             Payload = new JObject
@@ -938,7 +993,10 @@ namespace PlantillaChanchoV16.Template
                 ["emoji"] = _emoji.Text.Trim(),
                 ["tagline"] = _tagline.Text.Trim(),
                 ["description"] = ToJson(_description.Text),
-                ["prices"] = prices,
+                ["offers"] = offers,
+                // Ancien champ vidé : sinon un tarif hérité continuerait de
+                // s'afficher à côté des offres, avec deux prix contradictoires.
+                ["prices"] = new JArray(),
                 ["delivery"] = _delivery.Text.Trim(),
                 ["website"] = _website.Text.Trim(),
                 ["note"] = _note.Text.Trim(),
@@ -960,10 +1018,10 @@ namespace PlantillaChanchoV16.Template
         private readonly BotRemoteApi.Auth _auth;
         private readonly Guna2Panel _list;
         private readonly Guna2TextBox _intro;
-        private readonly Guna2HtmlLabel _feedback;
-        private readonly Guna2Button _newBtn, _introBtn;
+        private readonly Guna2HtmlLabel _feedback, _delivery;
+        private readonly Guna2Button _newBtn, _introBtn, _salesBtn;
 
-        public BotPaymentsDialog(string url, BotRemoteApi.Auth auth) : base(660, 660)
+        public BotPaymentsDialog(string url, BotRemoteApi.Auth auth) : base(660, 700)
         {
             _url = url;
             _auth = auth;
@@ -980,27 +1038,41 @@ namespace PlantillaChanchoV16.Template
                 Location = new Point(pad, 82),
             };
 
-            MakeFieldLabel("Intro — the sentence shown above the addresses", pad, 108);
+            // Etat de la livraison automatique : c'est LA information qui dit si
+            // une vente enverra la cle toute seule ou pas. Elle a sa place ici,
+            // au-dessus des adresses, pas cachee dans un menu.
+            _delivery = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "Auto-delivery: checking…", ForeColor = Color.FromArgb(150, 255, 255, 255),
+                Font = new Font("Inter Semibold", 9f), AutoSize = true, BackColor = Color.Transparent,
+                IsSelectionEnabled = false, Location = new Point(pad, 104),
+            };
+
+            MakeFieldLabel("Intro — the sentence shown above the addresses", pad, 130);
             int introW = Width - pad * 2 - 130;
             _intro = new Guna2TextBox
             {
-                Parent = this, Location = new Point(pad, 128), Size = new Size(introW, 52),
+                Parent = this, Location = new Point(pad, 150), Size = new Size(introW, 52),
                 Multiline = true, BorderRadius = 10, FillColor = Colors.scColor, BorderColor = Colors.scColor,
                 ForeColor = Color.White, Font = new Font("Inter Medium", 9.5f), Animated = true,
             };
             _intro.FocusedState.BorderColor = Colors.mainColor;
 
             _introBtn = MakeButton("Save text", false, 120, 52);
-            _introBtn.Location = new Point(_intro.Right + 10, 128);
+            _introBtn.Location = new Point(_intro.Right + 10, 150);
             _introBtn.Click += async (s, e) => await SaveIntroAsync();
 
             _newBtn = MakeButton("+ New method", true, 160, 40);
-            _newBtn.Location = new Point(Width - pad - _newBtn.Width, 192);
+            _newBtn.Location = new Point(Width - pad - _newBtn.Width, 214);
             _newBtn.Click += async (s, e) => await EditMethodAsync(null);
 
-            MakeFieldLabel("Methods", pad, 204);
+            _salesBtn = MakeButton("Sales", false, 110, 40);
+            _salesBtn.Location = new Point(_newBtn.Left - 10 - _salesBtn.Width, 214);
+            _salesBtn.Click += async (s, e) => await ShowSalesAsync();
 
-            int listY = 244, listH = Height - listY - 96;
+            MakeFieldLabel("Methods", pad, 226);
+
+            int listY = 266, listH = Height - listY - 96;
             _list = new Guna2Panel
             {
                 Parent = this, Location = new Point(pad, listY), Size = new Size(Width - pad * 2, listH),
@@ -1045,6 +1117,68 @@ namespace PlantillaChanchoV16.Template
                     ? "No payment method yet — add PayPal or a crypto address."
                     : $"{methods.Count} method(s), {active} shown to buyers.",
                 error: false);
+
+            await RefreshDeliveryStatusAsync();
+        }
+
+        // La cle vendeur KeyAuth ne quitte jamais l'hebergeur : on n'affiche que
+        // sa presence, et quoi faire si elle manque.
+        private async Task RefreshDeliveryStatusAsync()
+        {
+            var result = await BotRemoteApi.KeyAuthStatus(_url, _auth);
+            if (IsDisposed) return;
+
+            if (!result.Success)
+            {
+                _delivery.ForeColor = Color.FromArgb(235, 200, 120);
+                _delivery.Text = "Auto-delivery: unknown (bot unreachable)";
+                return;
+            }
+
+            bool ready = (bool?)result.Data?["configured"] == true;
+            string api = (string?)result.Data?["api"] ?? "keyauth";
+            _delivery.ForeColor = ready ? Colors.mainColor : Color.FromArgb(235, 200, 120);
+            _delivery.Text = ready
+                ? $"⚡ Auto-delivery ready — keys are generated on {api}"
+                : "⚠ Auto-delivery off — add KEYAUTH_SELLER_KEY to the bot's environment on your host, then restart it";
+        }
+
+        private async Task ShowSalesAsync()
+        {
+            _salesBtn.Enabled = false;
+            Say("Loading the sales…", error: false);
+            var result = await BotRemoteApi.Sales(_url, _auth, 30);
+            if (IsDisposed) return;
+            _salesBtn.Enabled = true;
+
+            if (!result.Success)
+            {
+                Say(result.Error ?? "Could not read the sales.", error: true);
+                return;
+            }
+
+            var sales = result.Data?["sales"] as JArray ?? new JArray();
+            if (sales.Count == 0)
+            {
+                using var empty = new SakuraInfoDialog("Sales", "No license delivered yet.");
+                empty.ShowDialog(this);
+                Say("No sale yet.", error: false);
+                return;
+            }
+
+            var sb = new StringBuilder();
+            foreach (var sale in sales.OfType<JObject>())
+            {
+                var when = DateTimeOffset.FromUnixTimeMilliseconds((long?)sale["at"] ?? 0).LocalDateTime;
+                sb.AppendLine($"{when:dd/MM/yyyy HH:mm}  {(string?)sale["productName"]} — {(string?)sale["offerLabel"]} ({(string?)sale["price"]})");
+                sb.AppendLine($"   buyer: {(string?)sale["buyerId"]}   key: {(string?)sale["keyMasked"]}   by: {(string?)sale["deliveredBy"]}");
+                if ((bool?)sale["dmSent"] == false) sb.AppendLine("   ⚠ DM closed — the key was posted in the ticket only");
+                sb.AppendLine();
+            }
+
+            using var dlg = new SakuraInfoDialog($"Sales ({sales.Count})", sb.ToString().TrimEnd());
+            dlg.ShowDialog(this);
+            Say($"{sales.Count} delivery(ies) listed.", error: false);
         }
 
         private void BuildRows(JArray methods)
