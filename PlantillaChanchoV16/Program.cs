@@ -23,6 +23,16 @@ namespace PlantillaChanchoV16
             Utilities.ThemeManager.LoadAndApply();
             Utilities.Localization.LoadAndApply();
 
+            // Élévation AVANT le mutex et AVANT le splash : le processus relancé
+            // doit pouvoir prendre le mutex (sinon il se croirait en double) et
+            // deux écrans de démarrage superposés clignoteraient.
+            // En temps normal on ne passe jamais ici : app.manifest demande déjà
+            // l'élévation à Windows. Ce relais sert aux cas où le manifeste n'est
+            // pas appliqué (exécution via "dotnet PaiPai.dll", exe recompilé sans
+            // le manifeste), pour relancer au lieu de refuser de démarrer.
+            if (!IsAdministrator() && RelaunchAsAdmin())
+                return;
+
             // Écran de démarrage visible DÈS LE DÉBUT : sinon, surtout juste après une mise à
             // jour (l'ancien processus a déjà fermé sa fenêtre ; le script de relance attend
             // ~1s+ qu'il disparaisse complètement, PUIS le nouveau processus doit encore
@@ -67,10 +77,15 @@ namespace PlantillaChanchoV16
                     }
                 }
 
+                // Dernier filet : on n'arrive ici que si l'élévation a échoué ET
+                // que la relance était impossible (exe introuvable, stratégie de
+                // groupe qui bloque UAC...).
                 if (!IsAdministrator())
                 {
                     splash.Close();
-                    PlantillaChanchoV16.Template.SakuraMessageBox.Show("The application must be run as administrator.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                        "PaiPai needs administrator rights to start.\nRight-click PaiPai.exe and choose \"Run as administrator\".",
+                        "Administrator required", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -165,6 +180,48 @@ namespace PlantillaChanchoV16
             });
         }
 
+
+        // Relance PaiPai avec le verbe "runas" (= invite UAC). Renvoie true quand
+        // l'instance courante doit s'arrêter : soit la relance est partie, soit
+        // l'utilisateur a refusé l'élévation — dans les deux cas, continuer sans
+        // les droits ne servirait à rien (installation des polices et tweaks
+        // système échoueraient silencieusement).
+        private static bool RelaunchAsAdmin()
+        {
+            // ProcessPath pointe l'exe réel, y compris en publication single-file
+            // (où Assembly.Location est vide).
+            string exePath = Environment.ProcessPath ?? "";
+            if (exePath.Length == 0 || !exePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            try
+            {
+                var psi = new ProcessStartInfo(exePath)
+                {
+                    // Obligatoire pour "runas" : sans UseShellExecute, Windows ne
+                    // sait pas afficher l'invite UAC.
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    WorkingDirectory = Path.GetDirectoryName(exePath) ?? Environment.CurrentDirectory,
+                };
+                Process.Start(psi);
+                return true;
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                // 1223 = ERROR_CANCELLED : l'utilisateur a cliqué "Non" sur l'UAC.
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                    "PaiPai needs administrator rights to install its fonts and run system tweaks.\nStart it again and accept the Windows prompt.",
+                    "Administrator required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return true;
+            }
+            catch
+            {
+                // Relance impossible : on laisse la suite du démarrage afficher le
+                // message d'aide plutôt que de mourir sans explication.
+                return false;
+            }
+        }
 
         private static bool IsAdministrator()
         {
