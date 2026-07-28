@@ -136,6 +136,7 @@ localement.
 |---|---|
 | `GET /ping` | Sans authentification — pour les robots de keep-alive. Ne divulgue rien. |
 | `POST /link/redeem` | Sans authentification — échange un code `/link` contre un jeton (voir 6.5) |
+| `POST /signup-key` | Sans authentification — délivre une clé de compte gratuit (quotas, voir plus bas) |
 | `GET /me` | Qui suis-je : clé de contrôle, ou compte Discord lié + rôles |
 | `GET /health` | En ligne ou non, uptime, serveur, membres, latence |
 | `GET /logs?since=N` | Les lignes de console apparues depuis la ligne N |
@@ -296,6 +297,42 @@ est automatique. Pour une détection réelle, il faut un encaissement qui
 prévient le vendeur (PayPal *Goods & Services* via son API, un processeur
 crypto type NOWPayments/BTCPay avec webhook) : c'est une évolution possible,
 pas un réglage.
+
+## Créer un compte PaiPai sans clé
+
+Sur l'onglet **Sign Up** de l'application, un lien « No license key? Create a
+free account » crée le compte sans rien demander d'autre qu'un identifiant et
+un mot de passe. Le produit reste verrouillé : le compte sert à se connecter,
+et la licence achetée s'ajoute ensuite via **Add license**.
+
+**Pourquoi ça passe par le bot :** KeyAuth n'accepte aucune inscription sans
+licence (`register(user, pass, key)` exige toujours une clé). Générer une clé
+demande la clé **vendeur** — impossible à mettre dans l'exe, elle serait
+extraite et n'importe qui pourrait alors supprimer toutes tes licences. Le bot
+la garde donc chez l'hébergeur et l'appli ne reçoit qu'une clé à usage unique
+via `POST /signup-key`. Le mot de passe, lui, ne passe jamais par le bot : il
+part directement de l'appli vers KeyAuth en HTTPS.
+
+**À configurer une fois** (en plus de `KEYAUTH_SELLER_KEY`) dans le `.env` du
+bot :
+
+```
+KEYAUTH_FREE_LEVEL=9
+KEYAUTH_FREE_DAYS=0
+```
+
+Crée sur le dashboard KeyAuth un abonnement dédié (ex. `Free`) à un niveau
+**qui n'est utilisé par aucun produit**, et mets ce niveau ici. `0` jour = clé
+à vie (le compte ne débloque rien, autant ne pas le faire expirer).
+
+⚠️ Si tu mets ici le niveau d'un vrai produit, la route publique distribue ton
+produit gratuitement. Sans ces variables, l'inscription sans clé est
+simplement désactivée et l'appli l'explique à l'utilisateur.
+
+**Garde-fous :** la route est publique (celui qui s'inscrit n'a pas encore de
+compte), donc elle est limitée à **3 comptes par heure et par IP** et
+**100 par jour** au total, et chaque délivrance est journalisée. Dépassé, le
+message invite simplement à réessayer plus tard.
 
 ## Commandes disponibles (réservées au Staff / Administrateur)
 

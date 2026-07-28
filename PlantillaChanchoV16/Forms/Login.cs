@@ -212,6 +212,25 @@ namespace PlantillaChanchoV16
             _registerFields.Controls.Add(_passwordR);
             _registerFields.Controls.Add(_licenseR);
 
+            // ---- Inscription sans licence ----
+            // KeyAuth exige toujours une cle a l'inscription : ce lien en
+            // demande une au serveur PaiPai (niveau "gratuit", qui ne debloque
+            // aucun produit) puis inscrit normalement. Visible uniquement sur
+            // l'onglet Sign Up, cf. ShowTab.
+            _freeAccountLink = new Guna2HtmlLabel
+            {
+                Parent = _card,
+                Text = "No license key? Create a free account",
+                ForeColor = Colors.mainColor,
+                Font = new Font("Inter Medium", 9f),
+                AutoSize = true,
+                Cursor = Cursors.Hand,
+                IsSelectionEnabled = false,
+                Visible = false
+            };
+            _freeAccountLink.Location = new Point((CardW - _freeAccountLink.Width) / 2, 332);
+            _freeAccountLink.Click += (s, e) => _ = RegisterAsync(freeAccount: true);
+
             // ---- Bouton principal ----
             _btnPrimary = new Guna2Button
             {
@@ -252,6 +271,7 @@ namespace PlantillaChanchoV16
         }
 
         private Guna2HtmlLabel _discordLink;
+        private Guna2HtmlLabel _freeAccountLink;
 
         private Guna2TextBox MakeField(string placeholder, Image icon, int y)
         {
@@ -331,8 +351,12 @@ namespace PlantillaChanchoV16
             _tagline.Location = new Point((CardW - _tagline.Width) / 2, _tagline.Location.Y);
 
             _btnPrimary.Text = signIn ? Localization.T("login.btn_signin") : Localization.T("login.btn_create_account");
-            int btnY = signIn ? 308 : 345;
+            // Le bouton descend de 7 px sur l'onglet Sign Up pour laisser
+            // passer le lien "compte gratuit" sous les champs.
+            int btnY = signIn ? 308 : 352;
             _btnPrimary.Location = new Point(CardPad, btnY);
+
+            if (_freeAccountLink != null) _freeAccountLink.Visible = !signIn;
 
             // "Remember me" visible seulement sur l'onglet Sign In.
             if (_rememberCheck != null) _rememberCheck.Visible = signIn;
@@ -794,42 +818,82 @@ namespace PlantillaChanchoV16
             }
         }
 
-        private async void CheckRegister()
+        private void CheckRegister() => _ = RegisterAsync(freeAccount: false);
+
+        // `freeAccount` : l'utilisateur n'a pas de cle. On en demande alors une
+        // au serveur PaiPai (cf. Utilities/SignupApi.cs) avant de s'inscrire —
+        // KeyAuth n'accepte aucune inscription sans licence.
+        private async Task RegisterAsync(bool freeAccount)
         {
-            if (string.IsNullOrWhiteSpace(_usernameR.Text) ||
-                string.IsNullOrWhiteSpace(_passwordR.Text) ||
-                string.IsNullOrWhiteSpace(_licenseR.Text))
+            if (string.IsNullOrWhiteSpace(_usernameR.Text) || string.IsNullOrWhiteSpace(_passwordR.Text))
             {
-                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Please fill in username, password and license.", "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Please fill in a username and a password.", "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            await Task.Delay(300);
+            string license = _licenseR.Text.Trim();
+            // Champ vide = même intention que le lien : on ne renvoie pas
+            // l'utilisateur chercher une clé qu'il n'a pas.
+            bool needFreeKey = freeAccount || license.Length == 0;
 
             if (!EnsureKeyAuthInitialized())
                 return;
 
+            // Chaque demande consomme une licence du quota côté serveur : on
+            // verrouille les deux déclencheurs le temps de l'aller-retour,
+            // sinon un double-clic crée deux clés pour un seul compte.
+            _btnPrimary.Enabled = false;
+            if (_freeAccountLink != null) _freeAccountLink.Enabled = false;
+
             try
             {
-                KeyAuthApp.register(_usernameR.Text, _passwordR.Text, _licenseR.Text);
-            }
-            catch (Exception ex)
-            {
-                PlantillaChanchoV16.Template.SakuraMessageBox.Show("Registration error: " + ex.Message, "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
+                if (needFreeKey)
+                {
+                    var free = await Utilities.SignupApi.RequestFreeKeyAsync();
+                    if (!free.Success)
+                    {
+                        PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                            free.Error + "\n\nYou can still sign up with a license key bought on our Discord.",
+                            "Free account", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                    license = free.Key;
+                }
 
-            if (KeyAuthApp.response.success)
-            {
-                PlantillaChanchoV16.Template.SakuraMessageBox.Show("User created successfully. You can now log in.", "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                try
+                {
+                    KeyAuthApp.register(_usernameR.Text, _passwordR.Text, license);
+                }
+                catch (Exception ex)
+                {
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show("Registration error: " + ex.Message, "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (KeyAuthApp.response.success)
+                {
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                        needFreeKey
+                            ? "Account created. You can sign in right away.\nProducts stay locked until you add a license — buy one on our Discord, then use \"Add license\"."
+                            : "User created successfully. You can now log in.",
+                        "Sign Up", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    // Show the real reason returned by KeyAuth (e.g. "invalid license",
+                    // "license used", "username taken", "keylevel doesn't match"...)
+                    PlantillaChanchoV16.Template.SakuraMessageBox.Show(
+                        string.IsNullOrEmpty(KeyAuthApp.response.message) ? "Registration failed, please try again." : KeyAuthApp.response.message,
+                        "Registration failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
-            else
+            finally
             {
-                // Show the real reason returned by KeyAuth (e.g. "invalid license",
-                // "license used", "username taken", "keylevel doesn't match"...)
-                PlantillaChanchoV16.Template.SakuraMessageBox.Show(
-                    string.IsNullOrEmpty(KeyAuthApp.response.message) ? "Registration failed, please try again." : KeyAuthApp.response.message,
-                    "Registration failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (!IsDisposed)
+                {
+                    _btnPrimary.Enabled = true;
+                    if (_freeAccountLink != null) _freeAccountLink.Enabled = true;
+                }
             }
         }
 

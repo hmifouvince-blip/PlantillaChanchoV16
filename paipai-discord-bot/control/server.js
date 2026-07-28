@@ -33,6 +33,32 @@ const REDEEM_MAX_ATTEMPTS = 10;
 const REDEEM_WINDOW_MS = 10 * 60 * 1000;
 const redeemAttempts = new Map(); // ip -> { count, resetAt }
 
+// Inscription sans licence : la route delivre une VRAIE cle KeyAuth, donc elle
+// se protege comme un distributeur. Deux limites cumulees -- par IP (contre
+// un utilisateur qui insiste) et globale par jour (contre un botnet, ou l'IP
+// change a chaque requete). Depassee, la limite ne casse rien : le bouton
+// "compte gratuit" affiche simplement de reessayer plus tard.
+const SIGNUP_MAX_PER_IP = 3;
+const SIGNUP_IP_WINDOW_MS = 60 * 60 * 1000;
+const SIGNUP_MAX_PER_DAY = 100;
+const signupAttempts = new Map(); // ip -> { count, resetAt }
+let signupDay = { day: null, count: 0 };
+
+function signupQuotaExceeded(ip) {
+  const now = Date.now();
+  const today = new Date(now).toISOString().slice(0, 10);
+  if (signupDay.day !== today) signupDay = { day: today, count: 0 };
+  if (signupDay.count >= SIGNUP_MAX_PER_DAY) return "daily";
+
+  const entry = signupAttempts.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    signupAttempts.set(ip, { count: 1, resetAt: now + SIGNUP_IP_WINDOW_MS });
+    return null;
+  }
+  entry.count += 1;
+  return entry.count > SIGNUP_MAX_PER_IP ? "ip" : null;
+}
+
 function tooManyRedeems(ip) {
   const now = Date.now();
   const entry = redeemAttempts.get(ip);
@@ -162,6 +188,46 @@ async function handle(req, res, client) {
     if (!result.ok) return send(403, result);
     console.log(`[link] ${result.tag} linked a PaiPai app (${result.roles.join(", ")}).`);
     return send(200, result);
+  }
+
+  // Inscription sans licence dans l'application PaiPai. Publique par nature :
+  // celui qui cree son compte n'a encore aucun identifiant. Elle delivre une
+  // cle au NIVEAU GRATUIT (KEYAUTH_FREE_LEVEL) -- un niveau qui ne doit
+  // correspondre a AUCUN produit, sinon la route donnerait le catalogue.
+  if (req.method === "POST" && url.pathname === "/signup-key") {
+    const freeLevel = String(process.env.KEYAUTH_FREE_LEVEL || "").trim();
+    if (!keyauth.isConfigured() || !freeLevel) {
+      return send(503, {
+        ok: false,
+        error: "Free sign-up is disabled on this server (KEYAUTH_SELLER_KEY / KEYAUTH_FREE_LEVEL missing).",
+      });
+    }
+
+    const ip = req.socket.remoteAddress || "?";
+    const blocked = signupQuotaExceeded(ip);
+    if (blocked) {
+      console.warn(`[signup] quota ${blocked} atteint — demande refusée.`);
+      return send(429, {
+        ok: false,
+        error: blocked === "ip"
+          ? "Too many accounts created from here. Try again in an hour."
+          : "Too many free accounts created today. Try again tomorrow.",
+      });
+    }
+
+    const license = await keyauth.createLicense({
+      days: Number(process.env.KEYAUTH_FREE_DAYS || 0),
+      level: freeLevel,
+      note: "PaiPai free account",
+    });
+    if (!license.ok) {
+      console.error(`[signup] échec de génération : ${license.error}`);
+      return send(502, { ok: false, error: license.error });
+    }
+
+    signupDay.count += 1;
+    console.log(`[signup] Compte gratuit délivré (clé ${keyauth.maskKey(license.key)}), ${signupDay.count} aujourd'hui.`);
+    return send(200, { ok: true, key: license.key });
   }
 
   const caller = identify(req);
