@@ -13,7 +13,7 @@ namespace PlantillaChanchoV16.Template
     // Bot Manager.
     internal class BotIcon : Control
     {
-        public enum Kind { Bot, Announcement, Update, Status, Tickets, Eye, EyeOff, Folder, Products }
+        public enum Kind { Bot, Announcement, Update, Status, Tickets, Eye, EyeOff, Folder, Products, Payment }
 
         public Kind IconKind { get; set; }
 
@@ -99,6 +99,16 @@ namespace PlantillaChanchoV16.Template
                         using (var bag = Rounded(new Rectangle((int)(cx - 9), (int)(cy - 4), 18, 13), 3))
                             g.DrawPath(pen, bag);
                         g.DrawArc(pen, cx - 5, cy - 10, 10, 12, 180, 180);
+                        break;
+
+                    // Portefeuille : carte bancaire + piece auraient donne deux
+                    // glyphes concurrents pour un seul ecran (PayPal ET crypto),
+                    // le portefeuille couvre les deux sans en privilegier un.
+                    case Kind.Payment:
+                        using (var wallet = Rounded(new Rectangle((int)(cx - 11), (int)(cy - 8), 22, 16), 4))
+                            g.DrawPath(pen, wallet);
+                        g.DrawLine(pen, cx - 11, cy - 2, cx + 11, cy - 2);
+                        g.FillEllipse(br, cx + 4, cy + 1, 4, 4);
                         break;
 
                     case Kind.Folder:

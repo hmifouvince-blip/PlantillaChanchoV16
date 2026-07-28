@@ -949,6 +949,381 @@ namespace PlantillaChanchoV16.Template
         }
     }
 
+    // ---- Moyens de paiement : liste + ajout/edition ----
+    // Les adresses vivent CHEZ LE BOT (data/store.json) : rien n'est copie ici,
+    // la liste est relue apres chaque enregistrement. Elles ne sont affichees
+    // au client que dans son ticket prive -- jamais dans un salon public, ou
+    // elles seraient recopiees par des arnaqueurs se faisant passer pour toi.
+    internal class BotPaymentsDialog : SakuraDialogBase
+    {
+        private readonly string _url;
+        private readonly BotRemoteApi.Auth _auth;
+        private readonly Guna2Panel _list;
+        private readonly Guna2TextBox _intro;
+        private readonly Guna2HtmlLabel _feedback;
+        private readonly Guna2Button _newBtn, _introBtn;
+
+        public BotPaymentsDialog(string url, BotRemoteApi.Auth auth) : base(660, 660)
+        {
+            _url = url;
+            _auth = auth;
+
+            int pad = 30;
+            MakeWordmarkAndTitle("Payments", pad);
+
+            new Guna2HtmlLabel
+            {
+                Parent = this,
+                Text = "Shown to the buyer inside their private ticket, right after it opens.",
+                ForeColor = Color.FromArgb(170, 255, 255, 255), Font = new Font("Inter Medium", 9f),
+                AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false,
+                Location = new Point(pad, 82),
+            };
+
+            MakeFieldLabel("Intro — the sentence shown above the addresses", pad, 108);
+            int introW = Width - pad * 2 - 130;
+            _intro = new Guna2TextBox
+            {
+                Parent = this, Location = new Point(pad, 128), Size = new Size(introW, 52),
+                Multiline = true, BorderRadius = 10, FillColor = Colors.scColor, BorderColor = Colors.scColor,
+                ForeColor = Color.White, Font = new Font("Inter Medium", 9.5f), Animated = true,
+            };
+            _intro.FocusedState.BorderColor = Colors.mainColor;
+
+            _introBtn = MakeButton("Save text", false, 120, 52);
+            _introBtn.Location = new Point(_intro.Right + 10, 128);
+            _introBtn.Click += async (s, e) => await SaveIntroAsync();
+
+            _newBtn = MakeButton("+ New method", true, 160, 40);
+            _newBtn.Location = new Point(Width - pad - _newBtn.Width, 192);
+            _newBtn.Click += async (s, e) => await EditMethodAsync(null);
+
+            MakeFieldLabel("Methods", pad, 204);
+
+            int listY = 244, listH = Height - listY - 96;
+            _list = new Guna2Panel
+            {
+                Parent = this, Location = new Point(pad, listY), Size = new Size(Width - pad * 2, listH),
+                FillColor = Colors.bgColor, BorderRadius = 10, BorderThickness = 0, AutoScroll = true,
+            };
+
+            _feedback = new Guna2HtmlLabel
+            {
+                Parent = this, Text = "Loading…", ForeColor = Color.FromArgb(170, 255, 255, 255),
+                Font = new Font("Inter Medium", 9f), AutoSize = false, Size = new Size(Width - pad * 2 - 130, 40),
+                BackColor = Color.Transparent, IsSelectionEnabled = false,
+                Location = new Point(pad, listY + listH + 16),
+            };
+
+            var close = MakeButton("Close", false, 100);
+            close.Location = new Point(Width - pad - close.Width, listY + listH + 16);
+            close.Click += (s, e) => Close();
+
+            CancelButton = close;
+            this.MouseDown += Drag;
+            this.Shown += async (s, e) => await ReloadAsync();
+        }
+
+        private async Task ReloadAsync()
+        {
+            Say("Loading…", error: false);
+            var result = await BotRemoteApi.Payments(_url, _auth);
+            if (IsDisposed) return;
+
+            if (!result.Success)
+            {
+                Say(result.Error ?? "Could not read the payment methods.", error: true);
+                return;
+            }
+
+            _intro.Text = (string?)result.Data?["intro"] ?? "";
+            var methods = result.Data?["methods"] as JArray ?? new JArray();
+            BuildRows(methods);
+
+            int active = methods.OfType<JObject>().Count(m => (bool?)m["enabled"] != false);
+            Say(methods.Count == 0
+                    ? "No payment method yet — add PayPal or a crypto address."
+                    : $"{methods.Count} method(s), {active} shown to buyers.",
+                error: false);
+        }
+
+        private void BuildRows(JArray methods)
+        {
+            _list.Controls.Clear();
+
+            int rowH = 74, gap = 8, y = 8;
+            int rowW = _list.Width - 16 - SystemInformation.VerticalScrollBarWidth;
+
+            foreach (var item in methods.OfType<JObject>())
+            {
+                string id = (string?)item["id"] ?? "";
+                string label = (string?)item["label"] ?? "";
+                string address = (string?)item["address"] ?? "";
+                string network = (string?)item["network"] ?? "";
+                string kind = (string?)item["kind"] ?? "other";
+                bool enabled = (bool?)item["enabled"] != false;
+
+                var row = new Guna2Panel
+                {
+                    Parent = _list, Location = new Point(8, y), Size = new Size(rowW, rowH),
+                    FillColor = Colors.scColor, BorderRadius = 10, BorderThickness = 0,
+                    CustomBorderThickness = new Padding(3, 0, 0, 0),
+                    CustomBorderColor = enabled ? Colors.mainColor : Color.FromArgb(120, 122, 138),
+                };
+
+                new Guna2HtmlLabel
+                {
+                    Parent = row, Text = $"{KindIcon(kind)} {label}", ForeColor = enabled ? Color.White : Color.FromArgb(160, 255, 255, 255),
+                    Font = new Font("Inter Semibold", 10f), AutoSize = true, BackColor = Color.Transparent,
+                    IsSelectionEnabled = false, Location = new Point(16, 10),
+                };
+                new Guna2HtmlLabel
+                {
+                    Parent = row, Text = Shorten(address, 44), ForeColor = Color.FromArgb(190, 255, 255, 255),
+                    Font = new Font("Consolas", 8.5f), AutoSize = true, BackColor = Color.Transparent,
+                    IsSelectionEnabled = false, Location = new Point(16, 31),
+                };
+                new Guna2HtmlLabel
+                {
+                    Parent = row,
+                    Text = (network.Length > 0 ? network + " • " : "") + (enabled ? "shown to buyers" : "hidden"),
+                    ForeColor = Color.FromArgb(140, 255, 255, 255), Font = new Font("Inter Medium", 8f),
+                    AutoSize = true, BackColor = Color.Transparent, IsSelectionEnabled = false,
+                    Location = new Point(16, 51),
+                };
+
+                var del = new Guna2Button
+                {
+                    Parent = row, Text = "Delete", Font = new Font("Inter Semibold", 9f),
+                    ForeColor = Color.FromArgb(255, 130, 120), FillColor = Colors.bgColor, BorderRadius = 8,
+                    BorderThickness = 0, Size = new Size(74, 32), Cursor = Cursors.Hand, Animated = true,
+                };
+                del.Location = new Point(rowW - 16 - del.Width, (rowH - del.Height) / 2);
+                del.HoverState.FillColor = ControlPaint.Light(Colors.bgColor, 0.3f);
+                del.Click += async (s, e) => await DeleteMethodAsync(id, label);
+
+                var edit = new Guna2Button
+                {
+                    Parent = row, Text = "Edit", Font = new Font("Inter Semibold", 9f), ForeColor = Color.White,
+                    FillColor = Colors.bgColor, BorderRadius = 8, BorderThickness = 0, Size = new Size(74, 32),
+                    Cursor = Cursors.Hand, Animated = true,
+                };
+                edit.Location = new Point(del.Left - 8 - edit.Width, (rowH - edit.Height) / 2);
+                edit.HoverState.FillColor = ControlPaint.Light(Colors.bgColor, 0.3f);
+                var captured = item;
+                edit.Click += async (s, e) => await EditMethodAsync(captured);
+
+                y += rowH + gap;
+            }
+        }
+
+        private static string KindIcon(string kind) => kind switch
+        {
+            "paypal" => "🅿",
+            "crypto" => "🪙",
+            _ => "💳",
+        };
+
+        // L'adresse complete tient rarement dans la ligne : on garde le debut ET
+        // la fin, les deux parties qu'on compare a l'oeil pour verifier qu'une
+        // adresse n'a pas ete remplacee.
+        private static string Shorten(string text, int max)
+        {
+            if (text.Length <= max) return text;
+            int head = (max - 3) / 2;
+            return text.Substring(0, head) + "..." + text.Substring(text.Length - (max - 3 - head));
+        }
+
+        private async Task SaveIntroAsync()
+        {
+            _introBtn.Enabled = false;
+            Say("Saving the intro…", error: false);
+            var result = await BotRemoteApi.SetPaymentIntro(_url, _auth, _intro.Text.Trim());
+            if (IsDisposed) return;
+            _introBtn.Enabled = true;
+            Say(result.Success ? "Intro saved." : result.Error ?? "Save failed.", error: !result.Success);
+        }
+
+        private async Task EditMethodAsync(JObject? existing)
+        {
+            using var dlg = new BotPaymentDialog(existing);
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            _newBtn.Enabled = false;
+            Say(existing == null ? "Adding the method…" : "Saving…", error: false);
+
+            var result = await BotRemoteApi.SavePayment(_url, _auth, dlg.Payload);
+            if (IsDisposed) return;
+            _newBtn.Enabled = true;
+
+            if (!result.Success)
+            {
+                Say(result.Error ?? "Save failed.", error: true);
+                return;
+            }
+            await ReloadAsync();
+        }
+
+        private async Task DeleteMethodAsync(string id, string label)
+        {
+            var confirm = SakuraMessageBox.Show($"Delete the payment method \"{label}\"?", "Bot Manager",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (confirm != DialogResult.Yes) return;
+
+            Say("Deleting…", error: false);
+            var result = await BotRemoteApi.DeletePayment(_url, _auth, id);
+            if (IsDisposed) return;
+            if (!result.Success)
+            {
+                Say(result.Error ?? "Delete failed.", error: true);
+                return;
+            }
+            await ReloadAsync();
+        }
+
+        private void Say(string text, bool error)
+        {
+            _feedback.ForeColor = error ? Color.FromArgb(255, 130, 120) : Color.FromArgb(170, 255, 255, 255);
+            _feedback.Text = text;
+        }
+    }
+
+    // ---- Formulaire d'un moyen de paiement ----
+    internal class BotPaymentDialog : SakuraDialogBase
+    {
+        private static readonly (string Key, string Name)[] Kinds =
+        {
+            ("paypal", "PayPal"),
+            ("crypto", "Crypto"),
+            ("other", "Other"),
+        };
+
+        private readonly Guna2ComboBox _kind;
+        private readonly Guna2TextBox _label, _address, _network, _note;
+        private readonly Guna2CustomCheckBox _enabled;
+        private readonly string _existingId;
+
+        public JObject Payload { get; private set; } = new JObject();
+
+        public BotPaymentDialog(JObject? existing) : base(560, 590)
+        {
+            _existingId = (string?)existing?["id"] ?? "";
+            bool isNew = _existingId.Length == 0;
+
+            int pad = 30;
+            int fieldW = Width - pad * 2;
+            int halfW = (fieldW - 12) / 2;
+            MakeWordmarkAndTitle(isNew ? "New payment method" : "Edit payment method", pad);
+
+            int y = 94;
+            MakeFieldLabel("Type", pad, y);
+            _kind = new Guna2ComboBox
+            {
+                Parent = this, Location = new Point(pad, y + 20), Size = new Size(halfW, 44),
+                Font = new Font("Inter Medium", 10f), BorderRadius = 10,
+            };
+            GunaTheme.StyleCombo(_kind);
+            foreach (var k in Kinds) _kind.Items.Add(k.Name);
+            _kind.SelectedIndex = 1;
+
+            MakeFieldLabel("Network (optional) — e.g. TRC-20, ERC-20", pad + halfW + 12, y);
+            _network = MakeTextBox("BTC, TRC-20, SOL…", new Point(pad + halfW + 12, y + 20), new Size(halfW, 44));
+
+            y += 86;
+            MakeFieldLabel("Label — what the buyer sees", pad, y);
+            _label = MakeTextBox("e.g. Bitcoin (BTC), PayPal (Friends & Family)", new Point(pad, y + 20), new Size(fieldW, 44));
+
+            y += 86;
+            MakeFieldLabel("Address — PayPal email, or the wallet address", pad, y);
+            _address = MakeTextBox("bc1q… / paipai@example.com", new Point(pad, y + 20), new Size(fieldW, 44));
+            // Chasse fixe : c'est ce qui rend un « 0 » et un « O » distinguables
+            // dans une adresse crypto, et une adresse mal relue = fonds perdus.
+            _address.Font = new Font("Consolas", 11f);
+
+            y += 86;
+            MakeFieldLabel("Note (optional) — instruction shown under the address", pad, y);
+            _note = MakeTextBox("e.g. Friends & Family only, no product name", new Point(pad, y + 20), new Size(fieldW, 44));
+
+            y += 86;
+            _enabled = new Guna2CustomCheckBox
+            {
+                Parent = this, Size = new Size(20, 20), Location = new Point(pad, y), Animated = true, Checked = true,
+            };
+            _enabled.CheckedState.FillColor = Colors.mainColor;
+            _enabled.CheckedState.BorderColor = Colors.mainColor;
+            _enabled.UncheckedState.FillColor = Colors.scColor;
+            _enabled.UncheckedState.BorderColor = Colors.scColor;
+            var enabledLabel = MakeFieldLabel("Shown to buyers (uncheck to hide it without deleting it)", pad + 28, y + 1);
+            enabledLabel.Cursor = Cursors.Hand;
+            enabledLabel.Click += (s, e) => _enabled.Checked = !_enabled.Checked;
+
+            if (existing != null) Fill(existing);
+
+            int buttonsY = y + 46;
+            var ok = MakeButton(isNew ? "Add" : "Save", true, 120);
+            ok.Location = new Point(Width - pad - ok.Width, buttonsY);
+            ok.Click += (s, e) => Submit();
+
+            var cancel = MakeButton("Cancel", false, 100);
+            cancel.Location = new Point(ok.Left - cancel.Width - 10, buttonsY);
+            cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+
+            CancelButton = cancel;
+            this.MouseDown += Drag;
+        }
+
+        private void Fill(JObject m)
+        {
+            string kind = (string?)m["kind"] ?? "crypto";
+            int idx = Array.FindIndex(Kinds, k => k.Key == kind);
+            _kind.SelectedIndex = idx >= 0 ? idx : 2;
+            _label.Text = (string?)m["label"] ?? "";
+            _address.Text = (string?)m["address"] ?? "";
+            _network.Text = (string?)m["network"] ?? "";
+            _note.Text = (string?)m["note"] ?? "";
+            _enabled.Checked = (bool?)m["enabled"] != false;
+        }
+
+        private void Submit()
+        {
+            string label = _label.Text.Trim();
+            string address = _address.Text.Trim();
+
+            if (label.Length == 0 || address.Length == 0)
+            {
+                SakuraMessageBox.Show("Label and address are both required.", "Bot Manager",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string kind = Kinds[Math.Max(0, _kind.SelectedIndex)].Key;
+
+            // Meme garde-fou que cote bot, mais AVANT l'aller-retour reseau :
+            // une adresse crypto avec un espace vient toujours d'un copier-coller
+            // qui a emporte du texte autour, et une adresse fausse = fonds perdus.
+            if (kind == "crypto" && address.Any(char.IsWhiteSpace))
+            {
+                SakuraMessageBox.Show("A crypto address cannot contain spaces — check the copy/paste.",
+                    "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            Payload = new JObject
+            {
+                ["kind"] = kind,
+                ["label"] = label,
+                ["address"] = address,
+                ["network"] = _network.Text.Trim(),
+                ["note"] = _note.Text.Trim(),
+                ["enabled"] = _enabled.Checked,
+            };
+            if (_existingId.Length > 0) Payload["id"] = _existingId;
+
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+    }
+
     // ---- Affichage d'un texte en lecture seule (tickets, resultats, ...) ----
     internal class SakuraInfoDialog : SakuraDialogBase
     {

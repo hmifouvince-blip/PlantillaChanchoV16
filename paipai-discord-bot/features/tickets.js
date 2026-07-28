@@ -14,6 +14,8 @@ const {
 } = require("discord.js");
 const branding = require("../config/branding");
 const catalog = require("../utils/catalog");
+const payments = require("../utils/payments");
+const { paymentEmbed, logoAttachment } = require("../utils/embeds");
 const store = require("../utils/store");
 const { TICKETS_CATEGORY_NAME } = require("../config/serverStructure");
 
@@ -28,6 +30,30 @@ const CLOSE_CANCEL_ID = "paipai_ticket_close_cancel";
 // button matching this prefix without listing every product key.
 const BUY_BUTTON_PREFIX = "paipai_buy_";
 const STAFF_ROLE_NAME = "Staff";
+
+// Publie la carte des moyens de paiement DANS LE SALON DONNE. Reutilisee par
+// l'ouverture de ticket et par /payment-post (quand le Staff veut la reposter
+// apres avoir change une adresse en cours de discussion).
+// Retourne null si aucun moyen n'est active : mieux vaut ne rien afficher
+// qu'une carte vide qui donnerait l'impression d'un bug.
+async function postPaymentCard(channel, { productName } = {}) {
+  const methods = payments.enabledList();
+  if (methods.length === 0) return null;
+
+  const embed = paymentEmbed({
+    methods,
+    intro: payments.intro(),
+    warning: payments.SCAM_WARNING,
+    productName,
+  });
+
+  const message = await channel.send({ embeds: [embed], files: [logoAttachment()] });
+  // Epinglee : dans un ticket qui s'allonge, l'acheteur retrouve les adresses
+  // sans faire defiler. L'echec d'epinglage (permission manquante) ne doit pas
+  // faire echouer l'ouverture du ticket.
+  await message.pin().catch(() => {});
+  return message;
+}
 
 // Posts the "Open a ticket" panel in #tickets.
 async function postTicketPanel(channel) {
@@ -158,6 +184,13 @@ async function createTicketChannel(interaction, reasonKey) {
     components: [controlRow],
   });
 
+  // Les moyens de paiement arrivent tout de suite apres, dans le meme salon
+  // prive : l'acheteur a tout sous les yeux sans attendre qu'un Staff soit
+  // disponible. Le paiement reste confirme a la main par le Staff.
+  await postPaymentCard(ticketChannel, { productName: product ? product.name : null }).catch((err) =>
+    console.error("[tickets] Carte de paiement non publiée :", err.message)
+  );
+
   return ticketChannel;
 }
 
@@ -251,6 +284,7 @@ module.exports = {
   CLOSE_CONFIRM_ID,
   CLOSE_CANCEL_ID,
   BUY_BUTTON_PREFIX,
+  postPaymentCard,
   postTicketPanel,
   handleOpenTicketButton,
   handleReasonSelect,

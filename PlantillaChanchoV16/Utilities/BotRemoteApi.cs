@@ -143,6 +143,22 @@ namespace PlantillaChanchoV16.Utilities
         public static Task<Result> SaveProduct(string baseUrl, Auth auth, JObject product)
             => SendAsync(HttpMethod.Post, baseUrl, auth, "/product", product);
 
+        // Moyens de paiement affiches dans les tickets (PayPal, crypto...).
+        // Comme le catalogue, ils vivent chez le bot : l'appli ne fait que les
+        // lire et les ecrire, jamais les stocker.
+        public static Task<Result> Payments(string baseUrl, Auth auth)
+            => SendAsync(HttpMethod.Get, baseUrl, auth, "/payments");
+
+        // Sans "id" -> ajout ; avec "id" -> modification des champs fournis.
+        public static Task<Result> SavePayment(string baseUrl, Auth auth, JObject method)
+            => SendAsync(HttpMethod.Post, baseUrl, auth, "/payment", method);
+
+        public static Task<Result> DeletePayment(string baseUrl, Auth auth, string id)
+            => SendAsync(HttpMethod.Post, baseUrl, auth, "/payment-delete", new JObject { ["id"] = id });
+
+        public static Task<Result> SetPaymentIntro(string baseUrl, Auth auth, string intro)
+            => SendAsync(HttpMethod.Post, baseUrl, auth, "/payment-intro", new JObject { ["intro"] = intro });
+
         // Publier VIA le bot (et non directement via l'API Discord) : la mise
         // en page riche vit dans paipai-discord-bot/utils/embeds.js, un seul
         // endroit. La reconstruire ici la ferait diverger au premier changement.

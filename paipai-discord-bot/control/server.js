@@ -14,6 +14,7 @@ const crypto = require("node:crypto");
 const util = require("node:util");
 const store = require("../utils/store");
 const catalog = require("../utils/catalog");
+const payments = require("../utils/payments");
 const branding = require("../config/branding");
 const link = require("../features/link");
 const { refreshStatusMessage } = require("../commands/status-set");
@@ -335,6 +336,42 @@ async function handle(req, res, client) {
 
     console.log(`[control] Produit ${result.created ? "créé" : "modifié"} par ${caller.label} : ${product.name}.`);
     return send(200, response);
+  }
+
+  // ---- Moyens de paiement ----
+  // Ce sont des donnees SENSIBLES au sens fraude : celui qui peut les ecrire
+  // peut detourner les paiements vers son propre portefeuille. D'ou le journal
+  // systematique de QUI change quoi -- la console live de PaiPai en garde la
+  // trace, ce qui rend un detournement visible immediatement.
+  if (req.method === "GET" && url.pathname === "/payments") {
+    return send(200, { ok: true, intro: payments.intro(), methods: payments.all() });
+  }
+
+  if (req.method === "POST" && url.pathname === "/payment") {
+    const body = await readJsonBody(req);
+    const result = payments.upsert(body);
+    if (!result.ok) return send(400, result);
+    console.log(
+      `[control] Moyen de paiement ${result.created ? "ajouté" : "modifié"} par ${caller.label} : ` +
+        `${result.method.label} (${result.method.kind}${result.method.enabled ? "" : ", désactivé"}).`
+    );
+    return send(200, { ok: true, created: result.created, method: result.method });
+  }
+
+  if (req.method === "POST" && url.pathname === "/payment-delete") {
+    const body = await readJsonBody(req);
+    const result = payments.remove(body.id);
+    if (!result.ok) return send(400, result);
+    console.log(`[control] Moyen de paiement supprimé par ${caller.label} : ${result.method.label}.`);
+    return send(200, { ok: true });
+  }
+
+  if (req.method === "POST" && url.pathname === "/payment-intro") {
+    const body = await readJsonBody(req);
+    const result = payments.setIntro(body.intro);
+    if (!result.ok) return send(400, result);
+    console.log(`[control] Texte d'introduction du paiement modifié par ${caller.label}.`);
+    return send(200, { ok: true, intro: result.intro });
   }
 
   return send(404, { ok: false, error: "Unknown route." });

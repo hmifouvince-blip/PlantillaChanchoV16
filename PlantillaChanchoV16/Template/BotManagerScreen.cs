@@ -630,10 +630,13 @@ namespace PlantillaChanchoV16.Template
             BuildActionCard(BotIcon.Kind.Status, "Status", "→ #status", new Point(Pad + (w + gap) * 2, rowY), w, h, async () => await DoStatus());
             BuildActionCard(BotIcon.Kind.Tickets, "Tickets", "Open list", new Point(Pad + (w + gap) * 3, rowY), w, h, async () => await DoViewTickets());
 
-            // 2e rangee, carte pleine largeur : a cinq cartes sur une seule
-            // rangee, le libelle « Announcement » ne tient plus dans sa carte.
-            BuildActionCard(BotIcon.Kind.Products, "Products", "Create a product or edit its description",
-                new Point(Pad, rowY + h + gap), contentW, h, async () => await DoProducts());
+            // 2e rangee, deux cartes larges : a six cartes sur une seule rangee,
+            // le libelle « Announcement » ne tiendrait plus dans sa carte.
+            int wideW = (contentW - gap) / 2;
+            BuildActionCard(BotIcon.Kind.Products, "Products", "Create or edit a product",
+                new Point(Pad, rowY + h + gap), wideW, h, async () => await DoProducts());
+            BuildActionCard(BotIcon.Kind.Payment, "Payments", "PayPal & crypto addresses",
+                new Point(Pad + wideW + gap, rowY + h + gap), wideW, h, () => DoPayments());
         }
 
         private void BuildActionCard(BotIcon.Kind kind, string title, string subtitle, Point loc, int w, int h, Action onClick)
@@ -731,6 +734,23 @@ namespace PlantillaChanchoV16.Template
             // Un produit cree/renomme doit apparaitre tout de suite dans les
             // menus Update et Status, sans rouvrir l'ecran.
             if (dlg.Changed) await RefreshProductsAsync();
+        }
+
+        // Moyens de paiement affiches dans les tickets. Reserve au mode distant
+        // pour la meme raison que les produits : les adresses vivent chez le
+        // bot, c'est lui qui les montre au client.
+        private void DoPayments()
+        {
+            if (!IsRemote)
+            {
+                SakuraMessageBox.Show(
+                    "Payment methods are stored in the bot itself.\nConnect to a hosted bot first — \"Link Discord\", or set a control URL in the profile.",
+                    "Bot Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var dlg = new BotPaymentsDialog(RemoteUrl, RemoteAuth);
+            dlg.ShowDialog(this);
         }
 
         private async Task DoUpdate()

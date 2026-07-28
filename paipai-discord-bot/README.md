@@ -144,6 +144,10 @@ localement.
 | `POST /product-status` | Change l'état d'un produit sur la page #statut |
 | `GET /products` | Le catalogue produit complet (intégrés + créés depuis PaiPai) |
 | `POST /product` | Crée ou modifie un produit, puis republie sa fiche |
+| `GET /payments` | Les moyens de paiement (PayPal, adresses crypto) + le texte d'intro |
+| `POST /payment` | Ajoute ou modifie un moyen de paiement |
+| `POST /payment-delete` | Supprime un moyen de paiement |
+| `POST /payment-intro` | Change la phrase affichée au-dessus des adresses |
 | `POST /announce` | Publie une annonce dans #announcements |
 | `POST /update` | Publie un changelog dans #updates |
 
@@ -191,6 +195,39 @@ l'application PaiPai.
   **Products**) ou dans `config/products.js` puis `/post-products` — voir
   « Modifier les produits présentés » plus bas.
 
+## Moyens de paiement (PayPal, crypto)
+
+Depuis PaiPai → **Bot Manager** → **Payments** : `+ New method` pour ajouter
+un PayPal ou une adresse crypto, `Edit` pour corriger, `Delete` pour retirer,
+et la case **Shown to buyers** pour en masquer un temporairement sans le
+supprimer. Le champ **Intro** en haut est la phrase affichée au-dessus des
+adresses. Tout part chez le bot immédiatement — **aucun redéploiement, aucun
+redémarrage**.
+
+Ce que voit l'acheteur : dès l'ouverture de son ticket, le bot poste (et
+épingle) une carte « 💳 Payment » avec chaque moyen activé — libellé, adresse
+dans un bloc de code (bouton copier), réseau et note. Le Staff confirme le
+montant et encaisse à la main, comme avant : **aucun paiement n'est
+automatisé**. Si tu changes une adresse en cours de discussion, `/payment-post`
+republie la carte dans le ticket.
+
+Trois garde-fous volontaires :
+
+- **Jamais dans un salon public.** Les adresses ne sont postées que dans le
+  ticket privé de l'acheteur : une adresse affichée publiquement se fait
+  recopier par des arnaqueurs qui se font ensuite passer pour toi en MP.
+- **Avertissement non modifiable** ajouté à chaque carte : « Staff will never
+  DM you first ». Il ne peut pas disparaître d'un mauvais copier-coller.
+- **Toute modification est journalisée** dans la console live (qui a changé
+  quoi) : quelqu'un qui détournerait un accès pour remplacer ton adresse BTC
+  par la sienne laisse une trace visible immédiatement.
+
+⚠️ Rappel : PayPal **Friends & Family** est prévu pour un envoi entre proches,
+pas pour une vente. L'utiliser pour encaisser un achat est contraire aux
+conditions de PayPal (risque de limitation du compte) et prive l'acheteur de
+toute protection. C'est ton choix commercial — le champ « note » de chaque
+moyen est là pour dire clairement à l'acheteur ce que tu attends de lui.
+
 ## Commandes disponibles (réservées au Staff / Administrateur)
 
 | Commande | Rôle requis | Effet |
@@ -200,6 +237,7 @@ l'application PaiPai.
 | `/status-set produit: état:` | Gérer le serveur | Met à jour la page #statut |
 | `/update-post title: changelog: [product:] [version:] [note:]` | Gérer le serveur | Publie une update dans #updates |
 | `/announce titre: message: ping:` | Gérer le serveur | Publie une annonce dans #annonces |
+| `/payment-post` | Gérer le serveur | Republie les moyens de paiement dans le salon courant (à utiliser dans un ticket) |
 | `/link` | Rôle PaiPai / PeiPei | Génère un code pour piloter le bot depuis PaiPai |
 | `/unlink` | Rôle PaiPai / PeiPei | Révoque tous ses accès PaiPai |
 

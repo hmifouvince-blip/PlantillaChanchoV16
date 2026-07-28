@@ -110,6 +110,36 @@ function updateEmbed({ title, changelog, product, version, note, productChannelI
   return embed;
 }
 
+// ---- Moyens de paiement (affiches UNIQUEMENT dans un ticket prive) ----
+// L'adresse est dans un bloc de code : Discord y ajoute un bouton « copier »
+// et n'y applique aucune mise en forme -- un underscore au milieu d'une
+// adresse ne peut donc pas la transformer en italique et la corrompre.
+const PAYMENT_ICONS = { paypal: "🅿️", crypto: "🪙", other: "💳" };
+
+function paymentEmbed({ methods, intro, warning, productName }) {
+  const embed = new EmbedBuilder()
+    .setColor(branding.colors.main)
+    .setAuthor({ name: "PaiPai — Payment", iconURL: LOGO_URI })
+    .setTitle(productName ? `💳 Payment — ${productName}` : "💳 Payment")
+    .setDescription([intro, warning].filter(Boolean).join("\n\n"))
+    .setThumbnail(LOGO_URI)
+    .setFooter(footerFor("Payment"))
+    .setTimestamp(Date.now());
+
+  for (const method of methods) {
+    const lines = [`\`\`\`\n${method.address}\n\`\`\``];
+    if (method.network) lines.push(`Network: **${method.network}**`);
+    if (method.note) lines.push(`_${method.note}_`);
+    embed.addFields({
+      name: `${PAYMENT_ICONS[method.kind] || PAYMENT_ICONS.other} ${method.label}`,
+      value: lines.join("\n"),
+      inline: false,
+    });
+  }
+
+  return embed;
+}
+
 // ---- Fiche produit ----
 function priceBlock(prices) {
   if (!Array.isArray(prices) || prices.length === 0) return null;
@@ -184,6 +214,7 @@ module.exports = {
   brandedEmbed,
   announceEmbed,
   updateEmbed,
+  paymentEmbed,
   productEmbed,
   productComponents,
 };

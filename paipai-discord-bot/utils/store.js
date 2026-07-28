@@ -24,6 +24,14 @@ const DEFAULTS = {
   // serait perdu, pas les donnees.
   productOverrides: {},
   customProducts: [],
+
+  // Moyens de paiement affiches dans les tickets (utils/payments.js), pilotes
+  // depuis PaiPai : { id, kind, label, address, network, note, enabled }.
+  // Ici et pas dans le code : changer une adresse ne doit jamais demander un
+  // redeploiement, et un redeploiement ne doit jamais ecraser une adresse.
+  paymentMethods: [],
+  // Phrase d'introduction affichee au-dessus des moyens de paiement.
+  paymentIntro: "",
   // id du message de la page de statut, pour l'EDITER au lieu d'en
   // reposter un nouveau a chaque /status-set.
   statusMessage: null, // { channelId, messageId }
