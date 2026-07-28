@@ -260,18 +260,29 @@ PaiPai → Bot Manager → **Products** → `Edit` → champ **Offers**, une lig
 formule :
 
 ```
-1 week    | 8 €  | 7   | 1
-1 month   | 20 € | 30  | 1
-Lifetime  | 90 € | 0   | 1
+1 week    | 8 €  | 7   | 102
+1 month   | 20 € | 30  | 102
+Lifetime  | 90 € | 0   | 102
 Reseller  | ask staff
 ```
 
 `libellé | prix | durée en jours | niveau KeyAuth`. `0` jour = à vie. Les deux
 derniers champs sont **facultatifs** : sans eux l'offre s'affiche sur la fiche
 produit mais ne peut pas être livrée automatiquement (pratique pour annoncer un
-prix avant d'avoir tranché la durée). Le **niveau** est ce qui décide à quel
-produit la clé donne accès : il doit correspondre au niveau de l'abonnement
-KeyAuth du produit (`Valorant`, `Roblox`, `Spoofer`, `WindowsPai`…).
+prix avant d'avoir tranché la durée).
+
+⚠️ Le **niveau** est ce qui décide à quel produit la clé donne accès. Ce n'est
+PAS un numéro d'ordre : c'est le niveau de l'abonnement KeyAuth, visible sur
+le dashboard (*Subscriptions*). Pour cette application :
+
+| Produit | Abonnement KeyAuth | Niveau à mettre |
+|---|---|---|
+| Woofer | `Spoofer` | **101** |
+| PaiPai Val + Emulator | `Valorant` | **102** |
+| Roblox | `Roblox` | **103** |
+| Windows PaiPai | `WindowsPai` | **104** |
+
+Un mauvais niveau = une clé qui débloque le mauvais produit (ou rien).
 
 ### 3. À chaque vente
 
@@ -317,17 +328,20 @@ part directement de l'appli vers KeyAuth en HTTPS.
 bot :
 
 ```
-KEYAUTH_FREE_LEVEL=9
+KEYAUTH_FREE_LEVEL=1
 KEYAUTH_FREE_DAYS=0
 ```
 
-Crée sur le dashboard KeyAuth un abonnement dédié (ex. `Free`) à un niveau
-**qui n'est utilisé par aucun produit**, et mets ce niveau ici. `0` jour = clé
-à vie (le compte ne débloque rien, autant ne pas le faire expirer).
+`1` est le niveau de l'abonnement `default` de KeyAuth, qui n'est utilisé par
+**aucun** produit PaiPai (les produits vivent aux niveaux 101 à 105) : un
+compte gratuit peut donc se connecter sans rien débloquer, sans avoir à créer
+quoi que ce soit sur le dashboard. `0` jour = clé à vie (le compte ne débloque
+rien, autant ne pas le faire expirer).
 
-⚠️ Si tu mets ici le niveau d'un vrai produit, la route publique distribue ton
-produit gratuitement. Sans ces variables, l'inscription sans clé est
-simplement désactivée et l'appli l'explique à l'utilisateur.
+⚠️ Si tu mets ici le niveau d'un vrai produit (101-104), la route publique
+distribue ce produit gratuitement à qui la connaît. Sans ces variables,
+l'inscription sans clé est simplement désactivée et l'appli l'explique à
+l'utilisateur.
 
 **Garde-fous :** la route est publique (celui qui s'inscrit n'a pas encore de
 compte), donc elle est limitée à **3 comptes par heure et par IP** et
